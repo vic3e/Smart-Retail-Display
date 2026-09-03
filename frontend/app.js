@@ -463,8 +463,15 @@
               resolve(ytPlayer); 
             }, 
             onStateChange: (e) => {
+              // State 0 is 'ENDED'
+              if (e.data === 0) {
+                console.log("[YouTube] Video finished, picking next...");
+                localStorage.removeItem("yt_last_video_id");
+                localStorage.removeItem("yt_last_time");
+                playYouTubeMedia(true);
+              }
               // YouTube Player State 1 is 'PLAYING'
-              if (e.data === 1) {
+              else if (e.data === 1) {
                 const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
                 // isUpcoming is sometimes present in the video data for Premieres
                 if (data && data.isUpcoming === true) {
