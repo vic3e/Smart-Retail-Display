@@ -109,3 +109,68 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
   height: 24px;
 }
 
+
+/* ── Splash Screen ──────────────────────────────────────────────────────── */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: radial-gradient(120% 120% at 20% 0%, #141c33 0%, #0a0f1e 45%, #060a16 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.8s ease, visibility 0.8s;
+}
+
+.splash-content {
+  text-align: center;
+}
+
+.splash-logo {
+  font-size: clamp(3rem, 8vw, 6rem);
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+
+.splash-subtitle {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--zuke);
+  margin: 0.5rem 0 2.5rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.splash-loader {
+  width: 240px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.splash-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--zuke);
+  transition: width 0.4s ease;
+}
+
+.splash-footer {
+  position: absolute;
+  bottom: 4vh;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.splash-screen.fade-out {
+  opacity: 0;
+  visibility: hidden;
+}
+

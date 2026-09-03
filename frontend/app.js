@@ -37,7 +37,9 @@
     brandBar: document.querySelector("#brandBar"),
     masterMute: document.querySelector("#master-mute"),
     muteIconOn: document.querySelector("#mute-icon-on"),
-    muteIconOff: document.querySelector("#mute-icon-off")
+    muteIconOff: document.querySelector("#mute-icon-off"),
+    splash: document.querySelector("#splash-screen"),
+    splashBar: document.querySelector("#splash-progress")
   };
 
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
@@ -472,13 +474,34 @@
     if (!ytPlayer || typeof ytPlayer.loadPlaylist !== "function") return;
     
     // Check if the listId is a video ID or a playlist ID
-    // Standard YouTube IDs are 11 chars. Playlists are usually much longer or start with PL.
+    // Standard YouTube IDs are 11 chars. Playlists/Mixes are usually much longer or start with PL.
     if (listId.length === 11 && !listId.startsWith("PL")) {
-      ytPlayer.loadVideoById(listId);
+      ytPlayer.loadVideoById({
+        videoId: listId,
+        suggestedQuality: 'default'
+      });
     } else {
-      ytPlayer.loadPlaylist({ list: listId, listType: "playlist", index: 0 });
+      // Use the most compatible loading method for playlists/mixes
+      const params = {
+        list: listId,
+        listType: 'playlist',
+        index: 0,
+        suggestedQuality: 'default'
+      };
+      
+      // If it's a Mix (not starting with PL), YouTube requires slightly different handling
+      if (!listId.startsWith("PL") && listId.length > 11) {
+        // Handle potential Radio/Mix IDs
+        ytPlayer.loadPlaylist(params);
+      } else {
+        ytPlayer.loadPlaylist(params);
+      }
     }
-    ytPlayer.playVideo();
+    
+    // Ensure we attempt to play
+    setTimeout(() => {
+      if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+    }, 500);
   }
 
   // Play using YouTube Data API
@@ -613,6 +636,26 @@
 
   // Wait briefly for the first Zuke poll so the initial frame is usually real
   // published content; falls back to /api/media|media.json within ~4s.
-  const delay = new Promise((r) => setTimeout(r, 4000));
-  Promise.race([adapter.start(), delay]).then(() => startCycle()).catch(() => startCycle());
+  async function init() {
+    // Show progress on splash
+    if (elements.splashBar) elements.splashBar.style.width = "30%";
+    
+    const delay = new Promise((r) => setTimeout(r, 4000));
+    
+    try {
+      await Promise.race([adapter.start(), delay]);
+      if (elements.splashBar) elements.splashBar.style.width = "100%";
+      
+      // Short delay to show 100% then fade
+      setTimeout(() => {
+        if (elements.splash) elements.splash.classList.add("fade-out");
+        startCycle();
+      }, 500);
+    } catch (e) {
+      if (elements.splash) elements.splash.classList.add("fade-out");
+      startCycle();
+    }
+  }
+
+  init();
 })();
