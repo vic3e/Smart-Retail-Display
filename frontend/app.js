@@ -223,17 +223,30 @@
     const apiKeyFromPayload = typeof data.youtube_api_key === "string" ? data.youtube_api_key.trim() : "";
     if (apiKeyFromPayload) window.YOUTUBE_API_KEY = apiKeyFromPayload;
 
+    // Use current playlists as defaults if payload is missing them (protection against partial Zuke payloads)
+    const morning = Array.isArray(data.youtube_morning_playlists) && data.youtube_morning_playlists.filter(Boolean).length 
+      ? data.youtube_morning_playlists.filter(Boolean) 
+      : config.morningPlaylists;
+    
+    const afternoon = Array.isArray(data.youtube_afternoon_playlists) && data.youtube_afternoon_playlists.filter(Boolean).length 
+      ? data.youtube_afternoon_playlists.filter(Boolean) 
+      : config.afternoonPlaylists;
+    
+    const evening = Array.isArray(data.youtube_evening_playlists) && data.youtube_evening_playlists.filter(Boolean).length 
+      ? data.youtube_evening_playlists.filter(Boolean) 
+      : config.eveningPlaylists;
+
     config = {
       adDurationMs: positive(data.ad_duration_seconds, 30, 300) * 1000,
       youtubeDurationMs: positive(data.youtube_duration_minutes, 10, 120) * 60_000,
-      playlistId: typeof data.youtube_playlist_id === "string" ? data.youtube_playlist_id.trim() : "",
-      fallbackPlaylists: Array.isArray(data.youtube_fallback_playlist_ids) ? data.youtube_fallback_playlist_ids.filter(Boolean) : [],
+      playlistId: typeof data.youtube_playlist_id === "string" ? data.youtube_playlist_id.trim() : (config.playlistId || ""),
+      fallbackPlaylists: Array.isArray(data.youtube_fallback_playlist_ids) ? data.youtube_fallback_playlist_ids.filter(Boolean) : (config.fallbackPlaylists || []),
       shuffle: !!data.youtube_shuffle,
       youtubeMode: resolvedMode,
       apiKey: apiKeyFromPayload || window.YOUTUBE_API_KEY || "",
-      morningPlaylists: Array.isArray(data.youtube_morning_playlists) ? data.youtube_morning_playlists.filter(Boolean) : [],
-      afternoonPlaylists: Array.isArray(data.youtube_afternoon_playlists) ? data.youtube_afternoon_playlists.filter(Boolean) : [],
-      eveningPlaylists: Array.isArray(data.youtube_evening_playlists) ? data.youtube_evening_playlists.filter(Boolean) : [],
+      morningPlaylists: morning,
+      afternoonPlaylists: afternoon,
+      eveningPlaylists: evening,
       schedule: validateSchedule(data.schedule)
     };
     rawMediaList = Array.isArray(data.media) ? data.media : [];
