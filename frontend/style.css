@@ -55,8 +55,46 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
 }
 
 #youtube-player { width: 100%; height: 100%; display: block; border: 0; }
-.entertainment-label { position: absolute; z-index: 2; bottom: 6vh; left: 50%; transform: translateX(-50%); font-size: .95rem; font-weight: 600; letter-spacing: .22em; color: #fff; background: rgba(6,10,22,.6); padding: 10px 20px; border-radius: 999px; border: 1px solid rgba(255,139,0,.35); transition: opacity 0.5s; }
-.entertainment-label::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--zuke); margin-right: 10px; vertical-align: middle; }
+.entertainment-label { 
+  position: absolute; 
+  z-index: 2; 
+  bottom: 6vh; 
+  left: 50%; 
+  transform: translateX(-50%); 
+  font-size: .95rem; 
+  font-weight: 600; 
+  letter-spacing: .22em; 
+  color: #fff; 
+  background: rgba(6,10,22,.6); 
+  padding: 10px 20px; 
+  border-radius: 999px; 
+  border: 1px solid rgba(255,139,0,.35); 
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 40px; /* Initially collapsed (just showing the dot) */
+}
+
+.entertainment-label::before { 
+  content: ""; 
+  display: inline-block; 
+  width: 8px; 
+  height: 8px; 
+  border-radius: 50%; 
+  background: var(--zuke); 
+  margin-right: 15px; 
+  vertical-align: middle; 
+  flex-shrink: 0;
+}
+
+.entertainment-label.expanded {
+  max-width: 400px; /* Expands to show text */
+  padding: 10px 25px;
+}
+
+#youtube-stage.mini .entertainment-label {
+  display: none; /* Hide label entirely in mini mode to keep it clean */
+}
 
 /* ── Progress ───────────────────────────────────────────────────────────── */
 .progress { position: absolute; z-index: 15; bottom: 0; left: 0; height: 6px; width: 100%; background: rgba(255,255,255,0.18); }

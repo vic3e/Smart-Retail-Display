@@ -39,13 +39,31 @@
     muteIconOn: document.querySelector("#mute-icon-on"),
     muteIconOff: document.querySelector("#mute-icon-off"),
     splash: document.querySelector("#splash-screen"),
-    splashBar: document.querySelector("#splash-progress")
+    splashBar: document.querySelector("#splash-progress"),
+    entertainmentLabel: document.querySelector(".entertainment-label")
   };
-
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
+  let labelTimeoutId = null;
   let store = { content: null, hasZuke: false };
   let ytPlayer = null, ytReady = false, masterMuted = localStorage.getItem("masterMuted") === "true";
   const ytVideoQueues = {};
+
+  function handleLabelAnimation() {
+    if (!elements.entertainmentLabel) return;
+    
+    // Clear any pending animation timeouts
+    clearTimeout(labelTimeoutId);
+    
+    // Initial expansion
+    setTimeout(() => {
+      elements.entertainmentLabel.classList.add("expanded");
+      
+      // Collapse after 5 seconds
+      labelTimeoutId = setTimeout(() => {
+        elements.entertainmentLabel.classList.remove("expanded");
+      }, 5000);
+    }, 1000);
+  }
 
   // Persistence: Store current video ID and time to local storage
   function saveYTState() {
@@ -473,6 +491,8 @@
   function playPlaylist(listId) {
     if (!ytPlayer || typeof ytPlayer.loadPlaylist !== "function") return;
     
+    handleLabelAnimation();
+    
     // Check if the listId is a video ID or a playlist ID
     // Standard YouTube IDs are 11 chars. Playlists/Mixes are usually much longer or start with PL.
     if (listId.length === 11 && !listId.startsWith("PL")) {
@@ -536,6 +556,7 @@
     if (state.videoId && isRecent) {
       console.log("[YouTube] Resuming last played video:", state.videoId, "at", state.time, "s");
       if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
+        handleLabelAnimation();
         ytPlayer.loadVideoById({
           videoId: state.videoId,
           startSeconds: state.time
