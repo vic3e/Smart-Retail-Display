@@ -8,9 +8,9 @@ ALLOWED_ORIENTATIONS = {"landscape", "portrait", "square"}
 ALLOWED_YOUTUBE_MODES = {"api", "normal", "both"}
 
 DEFAULT_SCHEDULE = {
-    "morning": {"start": "09:00", "end": "11:30"},
+    "morning": {"start": "05:00", "end": "11:30"},
     "afternoon": {"start": "11:30", "end": "18:00"},
-    "evening": {"start": "18:00", "end": "21:00"},
+    "evening": {"start": "18:00", "end": "22:00"},
 }
 
 DEFAULT_CONFIG = {

@@ -6,6 +6,8 @@ PRODUCT_GPIO_MAP = {
 }
 
 
-def pin_for_product(product_id: str) -> int | None:
+from typing import Optional
+
+def pin_for_product(product_id: str) -> Optional[int]:
     return PRODUCT_GPIO_MAP.get(product_id)
 

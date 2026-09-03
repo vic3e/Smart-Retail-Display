@@ -2,9 +2,9 @@
   "use strict";
   const MAX_AD_CYCLE_MS = 5 * 60_000;
   const DEFAULT_SCHEDULE = {
-    morning: { start: "09:00", end: "11:30" },
+    morning: { start: "05:00", end: "11:30" },
     afternoon: { start: "11:30", end: "18:00" },
-    evening: { start: "18:00", end: "21:00" }
+    evening: { start: "18:00", end: "22:00" }
   };
   const DEFAULTS = {
     adDurationMs: 30_000,
@@ -264,14 +264,27 @@
     elements.brandBar.innerHTML = html;
   }
 
+  let baseConfigLoaded = false;
   async function loadMedia() {
-    if (store.hasZuke && store.content) { parse(store.content); return; }
+    if (store.hasZuke && store.content && baseConfigLoaded) {
+      parse(store.content);
+      return;
+    }
     try {
       let resp = await fetch("/api/media", { cache: "no-store" });
       if (!resp.ok) resp = await fetch("media.json", { cache: "no-store" });
       if (!resp.ok) throw new Error("Media request failed (" + resp.status + ")");
-      parse(await resp.json());
-    } catch (e) { console.error("Unable to load media", e); parse({ media: [] }); }
+      const data = await resp.json();
+      parse(data);
+      baseConfigLoaded = true;
+      // If Zuke content was already received, re-apply it over the base we just loaded
+      if (store.hasZuke && store.content) {
+        parse(store.content);
+      }
+    } catch (e) {
+      console.error("Unable to load media", e);
+      if (!baseConfigLoaded) parse({ media: [] });
+    }
   }
 
   // Called by the subscription adapter whenever a NEWER revision arrives.
@@ -403,6 +416,18 @@
       });
     }
 
+    // Emergency fallback: if still empty, use any available playlist from any slot
+    if (!list.length) {
+      const allPossible = [
+        ...config.morningPlaylists,
+        ...config.afternoonPlaylists,
+        ...config.eveningPlaylists
+      ];
+      if (allPossible.length) {
+        list = allPossible;
+      }
+    }
+
     // Ensure uniqueness and clean strings
     return [...new Set(list.map(s => String(s || "").trim()).filter(Boolean))];
   }
@@ -418,8 +443,8 @@
         }
         elements.player.innerHTML = "";
         
-        // Use the safest possible origin: no trailing slashes, exact protocol
-        const origin = window.location.protocol + "//" + window.location.hostname + (window.location.port ? ":" + window.location.port : "");
+        // Use the safest possible origin: prioritize window.location.origin
+        const origin = window.location.origin || (window.location.protocol + "//" + window.location.hostname + (window.location.port ? ":" + window.location.port : ""));
         
         ytPlayer = new window.YT.Player(elements.player, {
           width: "100%", height: "100%",
@@ -678,6 +703,10 @@
   async function init() {
     // Show progress on splash
     if (elements.splashBar) elements.splashBar.style.width = "30%";
+    
+    // Load base configuration first (defaults from media.json/api)
+    await loadMedia();
+    if (elements.splashBar) elements.splashBar.style.width = "45%";
     
     const delay = new Promise((r) => setTimeout(r, 4000));
     
