@@ -45,6 +45,29 @@
   let ytPlayer = null, ytReady = false, masterMuted = localStorage.getItem("masterMuted") === "true";
   const ytVideoQueues = {};
 
+  // Persistence: Store current video ID and time to local storage
+  function saveYTState() {
+    if (!ytPlayer || !ytReady || typeof ytPlayer.getVideoData !== "function") return;
+    const data = ytPlayer.getVideoData();
+    const time = ytPlayer.getCurrentTime();
+    if (data && data.video_id) {
+      localStorage.setItem("yt_last_video_id", data.video_id);
+      localStorage.setItem("yt_last_time", time);
+      localStorage.setItem("yt_last_save_ts", Date.now().toString());
+    }
+  }
+
+  // Restore state: Load from local storage
+  function getYTState() {
+    return {
+      videoId: localStorage.getItem("yt_last_video_id"),
+      time: parseFloat(localStorage.getItem("yt_last_time") || "0")
+    };
+  }
+
+  // Auto-save progress every 5 seconds
+  setInterval(saveYTState, 5000);
+
   function updateMuteUI() {
     if (masterMuted) {
       elements.muteIconOn.classList.remove("hidden");
@@ -482,6 +505,23 @@
 
   // Unified YouTube playback router honoring youtubeMode ("api", "normal", "both")
   function playYouTubeMedia() {
+    const state = getYTState();
+    // Only resume if the saved video is from within the last 12 hours (freshness)
+    const lastSave = localStorage.getItem("yt_last_save_ts") || "0";
+    const isRecent = (Date.now() - parseInt(lastSave)) < 12 * 60 * 60 * 1000;
+
+    if (state.videoId && isRecent) {
+      console.log("[YouTube] Resuming last played video:", state.videoId, "at", state.time, "s");
+      if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
+        ytPlayer.loadVideoById({
+          videoId: state.videoId,
+          startSeconds: state.time
+        });
+        ytPlayer.playVideo();
+        return;
+      }
+    }
+
     const ids = playlistIds();
     if (!ids.length) {
       console.warn("[YouTube] No playlist ID configured in media configuration.");
