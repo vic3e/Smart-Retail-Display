@@ -516,7 +516,7 @@
       console.error("[YouTube API Mode]", err.message);
       return Promise.reject(err);
     }
-    const url = "https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=50&playlistId=" + encodeURIComponent(pid) + "&key=" + encodeURIComponent(apiKey);
+    const url = "https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails,snippet&maxResults=50&playlistId=" + encodeURIComponent(pid) + "&key=" + encodeURIComponent(apiKey);
     return fetch(url)
       .then(async (r) => {
         if (!r.ok) {
@@ -534,7 +534,20 @@
         return r.json();
       })
       .then((j) => {
-        const items = (j && j.items || []).map((it) => it && it.contentDetails && it.contentDetails.videoId).filter(Boolean);
+        const items = (j && j.items || [])
+          .filter((it) => {
+            // Skip upcoming premieres and live streams
+            // snippet.liveBroadcastContent is 'upcoming' for scheduled premieres
+            const liveStatus = it.snippet && it.snippet.liveBroadcastContent;
+            if (liveStatus === "upcoming") {
+              console.log("[YouTube API] Skipping upcoming premiere:", it.snippet.title);
+              return false;
+            }
+            return true;
+          })
+          .map((it) => it && it.contentDetails && it.contentDetails.videoId)
+          .filter(Boolean);
+        
         if (!items.length) {
           const err = new Error("No videos returned from YouTube Data API for playlist ID: " + pid);
           console.error("[YouTube API Mode]", err.message);
