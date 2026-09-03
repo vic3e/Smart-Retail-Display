@@ -477,8 +477,11 @@
               // we should skip to the next one to keep the entertainment loop running.
               if ([100, 101, 150].includes(e.data)) {
                 console.log("[YouTube] Error is fatal for this video, skipping...");
+                // Clear the saved state so we don't loop on the same broken video
+                localStorage.removeItem("yt_last_video_id");
+                localStorage.removeItem("yt_last_time");
                 setTimeout(() => {
-                  playYouTubeMedia();
+                  playYouTubeMedia(true);
                 }, 1000);
               }
 
@@ -600,13 +603,13 @@
   }
 
   // Unified YouTube playback router honoring youtubeMode ("api", "normal", "both")
-  function playYouTubeMedia() {
+  function playYouTubeMedia(forceNew = false) {
     const state = getYTState();
     // Only resume if the saved video is from within the last 12 hours (freshness)
     const lastSave = localStorage.getItem("yt_last_save_ts") || "0";
     const isRecent = (Date.now() - parseInt(lastSave)) < 12 * 60 * 60 * 1000;
 
-    if (state.videoId && isRecent) {
+    if (!forceNew && state.videoId && isRecent) {
       console.log("[YouTube] Resuming last played video:", state.videoId, "at", state.time, "s");
       if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
         handleLabelAnimation();
