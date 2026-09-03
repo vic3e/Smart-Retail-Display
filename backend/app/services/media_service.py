@@ -101,6 +101,9 @@ def load_media_configuration(media_file: Path, default_mode: str = "both", defau
         "youtube_duration_minutes": valid_number(data.get("youtube_duration_minutes"), DEFAULT_CONFIG["youtube_duration_minutes"], 120),
         "youtube_mode": resolved_mode,
         "youtube_api_key": resolved_api_key,
+        "youtube_morning_playlists": data.get("youtube_morning_playlists", []),
+        "youtube_afternoon_playlists": data.get("youtube_afternoon_playlists", []),
+        "youtube_evening_playlists": data.get("youtube_evening_playlists", []),
         "schedule": schedule,
     }
 

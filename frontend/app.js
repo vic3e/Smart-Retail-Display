@@ -14,6 +14,9 @@
     shuffle: false,
     youtubeMode: "both",
     apiKey: "",
+    morningPlaylists: [],
+    afternoonPlaylists: [],
+    eveningPlaylists: [],
     schedule: DEFAULT_SCHEDULE
   };
   const ZUKE_LOGO = "https://res.cloudinary.com/dekgwsl3c/image/upload/v1765557660/Wide_Logos_v2_Zuke_Logo_Wide_White_shv9wx.webp";
@@ -182,6 +185,9 @@
       shuffle: !!data.youtube_shuffle,
       youtubeMode: resolvedMode,
       apiKey: apiKeyFromPayload || window.YOUTUBE_API_KEY || "",
+      morningPlaylists: Array.isArray(data.youtube_morning_playlists) ? data.youtube_morning_playlists.filter(Boolean) : [],
+      afternoonPlaylists: Array.isArray(data.youtube_afternoon_playlists) ? data.youtube_afternoon_playlists.filter(Boolean) : [],
+      eveningPlaylists: Array.isArray(data.youtube_evening_playlists) ? data.youtube_evening_playlists.filter(Boolean) : [],
       schedule: validateSchedule(data.schedule)
     };
     rawMediaList = Array.isArray(data.media) ? data.media : [];
@@ -316,13 +322,28 @@
 
 // ── YouTube entertainment (fallback / random videos) ─────────────────────
   function playlistIds() {
-    const list = [];
-    if (config.playlistId) list.push(config.playlistId);
-    (config.fallbackPlaylists || []).forEach((p) => {
-      const pid = String(p || "").trim();
-      if (pid && !list.includes(pid)) list.push(pid);
-    });
-    return list;
+    const slot = getCurrentTimeSlot(config.schedule);
+    let list = [];
+
+    if (slot === "morning") {
+      list = [...config.morningPlaylists, ...config.eveningPlaylists];
+    } else if (slot === "afternoon") {
+      list = [...config.afternoonPlaylists];
+    } else if (slot === "evening") {
+      list = [...config.eveningPlaylists, ...config.morningPlaylists];
+    }
+
+    // Fallback to legacy/general lists if slot-specific lists are empty
+    if (!list.length) {
+      if (config.playlistId) list.push(config.playlistId);
+      (config.fallbackPlaylists || []).forEach((p) => {
+        const pid = String(p || "").trim();
+        if (pid && !list.includes(pid)) list.push(pid);
+      });
+    }
+
+    // Ensure uniqueness and clean strings
+    return [...new Set(list.map(s => String(s || "").trim()).filter(Boolean))];
   }
 
   // Lazily load the YouTube IFrame API and create the player.
@@ -428,7 +449,8 @@
     if (!ytPlayer || typeof ytPlayer.loadPlaylist !== "function") return;
     
     // Check if the listId is a video ID or a playlist ID
-    if (listId.length === 11) {
+    // Standard YouTube IDs are 11 chars. Playlists are usually much longer or start with PL.
+    if (listId.length === 11 && !listId.startsWith("PL")) {
       ytPlayer.loadVideoById(listId);
     } else {
       ytPlayer.loadPlaylist({ list: listId, listType: "playlist", index: 0 });

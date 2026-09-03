@@ -16,6 +16,17 @@
   "ad_duration_seconds": 30,
   "youtube_duration_minutes": 10,
   "youtube_playlist_id": "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+  "youtube_morning_playlists": ["PL5KIAukFInzsB_EfwC1Zi5Mg7y7PlDTFT"],
+  "youtube_afternoon_playlists": [
+    "PLyyJqitdpWMW82LEngVg_njqZH4ptctAO",
+    "PLiHTLoAQj-eukG9gHUlLhWJ7BQop2y3dY",
+    "PL2x-neIyQH6WmKPTPBarFHAvbz0ROs0KF"
+  ],
+  "youtube_evening_playlists": [
+    "PLY7v70bGVb3n_-GvTwTXkRiDy-Pj4wHTs",
+    "PLloxRkIwt8TMJFgRV9GiGWg1MXCZaemWv",
+    "7SC30FFWZ6Q"
+  ],
   "media": [
     {
       "id": "media_001",
