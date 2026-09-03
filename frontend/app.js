@@ -138,6 +138,9 @@
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
+    // Debug: Log the current time being used for slot calculation
+    console.log(`[TimeCheck] Current local time: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} (${currentMins} mins)`);
+
     for (const [slotName, range] of Object.entries(schedule)) {
       if (!range || typeof range.start !== "string" || typeof range.end !== "string") continue;
       const [sH, sM] = range.start.split(":").map(Number);
@@ -280,6 +283,8 @@
     elements.progress.style.transition = "none";
     elements.progress.style.width = "0";
     requestAnimationFrame(() => {
+      // Force a reflow to ensure the transition is reapplied for every ad
+      void elements.progress.offsetWidth;
       elements.progress.style.transition = "width " + duration + "ms linear";
       elements.progress.style.width = "100%";
     });
