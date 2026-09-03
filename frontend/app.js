@@ -462,6 +462,19 @@
               ytReady = true; 
               resolve(ytPlayer); 
             }, 
+            onStateChange: (e) => {
+              // YouTube Player State 1 is 'PLAYING'
+              if (e.data === 1) {
+                const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
+                // isUpcoming is sometimes present in the video data for Premieres
+                if (data && data.isUpcoming === true) {
+                  console.warn("[YouTube] Detected upcoming premiere during playback, skipping...");
+                  localStorage.removeItem("yt_last_video_id");
+                  localStorage.removeItem("yt_last_time");
+                  setTimeout(() => playYouTubeMedia(true), 500);
+                }
+              }
+            },
             onError: (e) => { 
               const errorMap = {
                 2: "Invalid video parameter or bad ID format.",
