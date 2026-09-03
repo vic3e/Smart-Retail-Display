@@ -472,6 +472,16 @@
               };
               const msg = errorMap[e.data] || "Unknown player error code: " + e.data;
               console.error("[YouTube Player Error " + e.data + "]:", msg);
+              
+              // If a video fails to play (e.g. embedding restricted or deleted),
+              // we should skip to the next one to keep the entertainment loop running.
+              if ([100, 101, 150].includes(e.data)) {
+                console.log("[YouTube] Error is fatal for this video, skipping...");
+                setTimeout(() => {
+                  playYouTubeMedia();
+                }, 1000);
+              }
+
               ytReady = true; 
               resolve(ytPlayer); 
             } 
