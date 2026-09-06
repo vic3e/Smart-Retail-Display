@@ -154,6 +154,7 @@ body.sidebar-layout .payment-overlay {
   border-left: 4px solid var(--zuke);
   color: #fff;
   gap: 15px;
+  z-index: 12;
 }
 
 body.sidebar-layout .payment-overlay .qr-code {
@@ -381,13 +382,85 @@ body.sidebar-layout .progress {
   color: #0a0f1e;
   padding: 6px 16px;
   border-radius: 10px;
-  font-size: clamp(0.85rem, 1.2vw, 1.2rem);
+  font-size: clamp(0.75rem, 1.1vw, 1.1rem);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  margin-top: 1.5vh;
+  margin: 0;
   box-shadow: 0 4px 16px rgba(255, 139, 0, 0.3);
   text-shadow: none; /* overrides parent text shadow for perfect readability */
   transition: all 0.3s ease;
+}
+
+#media-stage {
+  height: 82vh !important;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Bottom Caption & Payment Banner ───────────────────────────────────── */
+.caption-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 18vh;
+  background: #070b19; /* deep rich black-blue matching Zuke brand */
+  border-top: 1.5px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6vw;
+  z-index: 5;
+  box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
+}
+
+/* Redefine caption positioning since it is now inside the bottom bar */
+.caption {
+  position: static;
+  max-width: 50vw;
+  text-shadow: none;
+}
+.caption-business {
+  margin: 0 0 .3rem;
+  color: var(--zuke);
+  font-size: clamp(.8rem, 1.1vw, 1.1rem);
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.caption-name {
+  margin: 0;
+  font-size: clamp(1.5rem, 3.2vw, 3.8rem);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.1;
+  color: #fff;
+}
+
+/* Redefine payment-overlay positioning - direct sibling of stages so its z-index (6) is respected over the bottom bar (5) */
+.payment-overlay {
+  position: absolute;
+  z-index: 6;
+  right: 6vw;
+  bottom: 3.5vh; /* Aligns centered inside the 18vh bottom bar */
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.97);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  border-left: 4px solid var(--zuke);
+  min-width: auto;
+  transition: all 0.5s ease;
+}
+.payment-overlay p {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #0a0f1e;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  font-family: 'Hanken Grotesk', sans-serif;
 }
 
