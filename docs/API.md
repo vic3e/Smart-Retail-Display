@@ -31,6 +31,7 @@ Spark/Zuke Platform
 During development and MVP phases, the system operates in development mode using local configuration:
 - Media definitions are loaded from `frontend/media.json`.
 - The FastAPI backend serves these validated definitions at `GET /api/media`.
+- `frontend/config.js` holds the development base URLs: `MEDIA_API_BASE_URL` points at the FastAPI backend (commonly `http://localhost:3002`), while `PAIRING_API_BASE_URL` / `DASHBOARD_API_BASE_URL` point at the Node.js dashboard (commonly `http://localhost:3000`).
 - If the backend is unavailable or running as a static web server, the display engine automatically falls back to fetching `media.json` directly.
 
 ### Sample Development JSON
@@ -112,6 +113,7 @@ The media configuration is structured as a root JSON object containing a `media`
 | `id` | `string` | **Required** | Unique identifier for the media record | `"media_001"` |
 | `business_id` | `string` | **Required** | Identifier of the merchant / business | `"business_001"` |
 | `business_name` | `string` | **Required** | Display name of the business shown on caption/header | `"GrowthPilot"` |
+| `business_logo` | `string` | **Optional** | Absolute URL to the business logo rendered in the brand bar | `"https://cdn.example.com/logo.png"` |
 | `type` | `string` | **Required** | Content category classification | `"product"` |
 | `name` | `string` | **Required** | Name of advertised item / campaign title | `"Search Engine Optimization"` |
 | `media_type` | `string` | **Required** | Type of media asset (`"image"` or `"video"`) | `"image"` |
@@ -128,12 +130,17 @@ The media configuration is structured as a root JSON object containing a `media`
 
 | Field | Type | Requirement | Default | Purpose |
 | --- | --- | --- | --- | --- |
-| `schedule` | `object` | Optional | Morning: 09:00-11:30, Afternoon: 11:30-18:00, Evening: 18:00-21:00 | Time window boundaries for ad slot matching |
+| `schedule` | `object` | Optional | Morning: 05:00-11:30, Afternoon: 11:30-18:00, Evening: 18:00-22:00 | Time window boundaries for ad slot matching (`morning`, `afternoon`, `evening`) |
 | `youtube_playlist_id` | `string` | Optional | `""` | YouTube playlist/video ID for the entertainment intermission |
 | `ad_duration_seconds` | `integer` | Optional | `30` | Duration (in seconds) to show each individual ad slot (1–300s) |
 | `youtube_duration_minutes` | `integer` | Optional | `10` | Duration (in minutes) to run the YouTube intermission (1–120m) |
 | `youtube_mode` | `string` | Optional | `"both"` | Mode: `"api"` (YouTube Data API), `"normal"` (standard IFrame playlist embed), or `"both"` (API with embed fallback) |
 | `youtube_api_key` | `string` | Optional | `""` | Optional Google / YouTube Data API v3 key |
+| `youtube_morning_playlists` | `array<string>` | Optional | `[]` | YouTube playlist IDs used during the `morning` schedule slot |
+| `youtube_afternoon_playlists` | `array<string>` | Optional | `[]` | YouTube playlist IDs used during the `afternoon` schedule slot |
+| `youtube_evening_playlists` | `array<string>` | Optional | `[]` | YouTube playlist IDs used during the `evening` schedule slot |
+| `youtube_fallback_playlist_ids` | `array<string>` | Optional | `[]` | Fallback playlist pool used when the primary playback mode or playlist cannot resolve |
+| `youtube_shuffle` | `boolean` | Optional | `false` | Shuffle the active YouTube queue ordering |
 
 ---
 
@@ -174,18 +181,35 @@ The display engine follows a 12-step processing pipeline:
 
 ## 6. API Request
 
-### Local Development Request
+### Endpoint Overview
+
+The full API surface spans three backends (see Sections 12 and 13 for the pairing and webhook payloads):
+
+| Endpoint | Backend | Purpose |
+| --- | --- | --- |
+| `GET /api/media` | FastAPI (`MEDIA_API_BASE_URL`) | Validated media + entertainment configuration |
+| `POST /api/paystack/webhook` | FastAPI | Paystack charge-success webhook → unlock product |
+| `POST /api/screens/initiate-pairing` | Node.js dashboard (`DASHBOARD_API_BASE_URL`) | Generate a pairing code (authenticated) |
+| `POST /api/screens/complete-pairing` | Node.js dashboard (`PAIRING_API_BASE_URL`) | Link a display `deviceId` to a code |
+| `GET /api/screens?businessId=...` | Node.js dashboard | List screens for a business (authenticated) |
+| `GET /api/screens/:deviceId/playlist` | Node.js dashboard | Screen-scoped ad playlist |
+| `GET /api/display-ads/export` | app.zuke.co.za | Versioned published content (live Zuke source) |
+
+### Local Development Request (Media Configuration)
 ```http
 GET /api/media HTTP/1.1
 Host: 127.0.0.1:8000
 Accept: application/json
 ```
+*In development the display is configured via `frontend/config.js`: `MEDIA_API_BASE_URL` points at the FastAPI backend (commonly `http://localhost:3002`) and `PAIRING_API_BASE_URL` / `DASHBOARD_API_BASE_URL` point at the Node.js dashboard (commonly `http://localhost:3000`).*
 
-### Production API Request
+### Live Zuke Request
 ```http
-GET <API_ENDPOINT_TBD> HTTP/1.1
+GET https://app.zuke.co.za/api/display-ads/export HTTP/1.1
+Accept: application/json
+If-None-Match: "rev-<revision>"
 ```
-*Note: The production API endpoint is still to be confirmed (TBD) with the Spark/Zuke backend team.*
+*The endpoint returns HTTP `304` when the content revision has not changed since the last poll (see Section 11).*
 
 ---
 
@@ -210,7 +234,9 @@ curl -X GET "https://<API_HOST_TBD>/<API_ENDPOINT_TBD>" \
       "id": "media_001",
       "business_id": "business_001",
       "business_name": "Amanda Cosmetics",
+      "business_logo": "https://cdn.example.com/logo.png",
       "type": "product",
+      "category": "beauty",
       "name": "Premium Lipstick Collection",
       "media_type": "image",
       "media_url": "https://cdn.example.com/lipstick.jpg",
@@ -218,12 +244,23 @@ curl -X GET "https://<API_HOST_TBD>/<API_ENDPOINT_TBD>" \
       "payment_status": "paid",
       "play_count": 2,
       "status": "active",
-      "orientation": "landscape"
+      "orientation": "landscape",
+      "time": "all"
     }
   ],
   "youtube_playlist_id": "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
   "ad_duration_seconds": 30,
-  "youtube_duration_minutes": 10
+  "youtube_duration_minutes": 10,
+  "youtube_mode": "both",
+  "youtube_api_key": "",
+  "youtube_morning_playlists": ["PL5KIAukFInzsB_EfwC1Zi5Mg7y7PlDTFT"],
+  "youtube_afternoon_playlists": ["PLyyJqitdpWMW82LEngVg_njqZH4ptctAO"],
+  "youtube_evening_playlists": ["PLY7v70bGVb3n_-GvTwTXkRiDy-Pj4wHTs"],
+  "schedule": {
+    "morning": { "start": "05:00", "end": "11:30" },
+    "afternoon": { "start": "11:30", "end": "18:00" },
+    "evening": { "start": "18:00", "end": "22:00" }
+  }
 }
 ```
 
@@ -246,21 +283,77 @@ The display engine is resilient against data corruption, network errors, and inv
 
 ## 10. Authentication
 
-Authentication details for the production Spark/Zuke API are:
+The API surface is split across three backends with different trust models:
 
-**Authentication method: TBD**
+- **Media configuration (`GET /api/media`)** — Public. The display fetches media without credentials; access is intended to be network-isolated.
+- **Node.js dashboard screens API (`/api/screens/...`)** — Dashboard endpoints (`initiate-pairing`, list) require an authenticated dashboard session (Auth0 JWT, verified via JWKS). Display-side endpoints (`complete-pairing`, `:deviceId/playlist`) are **public**; the display's generated `deviceId` (persisted in `localStorage` under `smart-retail-display-deviceId`) is the de-facto device credential.
+- **Paystack webhook (`POST /api/paystack/webhook`)** — Authenticated by an HMAC-SHA512 signature in the `x-paystack-signature` header, computed over the raw request body with the `PAYSTACK_SECRET_KEY` environment variable.
 
-Requirements to be confirmed with the Spark/Zuke backend team:
-- Authentication scheme (e.g., Bearer Token, API Key header, Mutual TLS, or HMAC signatures)
-- Display unit registration / Device ID credentials
-- Token refresh lifecycle and rate limits
+Requirements still to be confirmed with the Spark/Zuke backend team:
+- Token refresh lifecycle and rate limits for the Zuke export endpoint
+- Whether screens should authenticate per-device (e.g. key rotation) beyond the current `deviceId`
 
 ---
 
-## 11. Future Zuke/Spark Integration
+## 11. Zuke/Spark Integration (Live)
 
-The application contains a modular transport seam (`subscription-adapter.js`). Moving from the local development mode (`media.json` / `GET /api/media`) to the live Spark/Zuke platform will occur via:
+The application ships with a modular transport seam (`subscription-adapter.js`) and currently uses the HTTP polling adapter against Zuke's versioned export endpoint — this is the **live** production source for published content, not a future goal:
 
-1. **Configuring the Subscription URL**: Pointing the adapter to the live Zuke export endpoint or message broker topic.
-2. **Preserving the Data Contract**: The data schema defined above serves as the formal data contract. The production API must return this structure.
-3. **Zero UI Rewrite**: The display playback engine (`app.js`) consumes the data contract uniformly, requiring no modifications to the rendering or QR code generation logic.
+- **Endpoint**: `https://app.zuke.co.za/api/display-ads/export` (override with the `?zuke=<url>` query parameter or `window.ZUKE_EXPORT_URL`).
+- **Polling**: Every `POLL_INTERVAL_MS` (30 s) with `If-None-Match: "rev-<revision>"`; HTTP `304` means unchanged and no re-render occurs.
+- **Revisioning**: The payload carries a numeric `revision` idempotency key (and `published_at`). Listeners ignore payloads whose `revision` is not greater than the last one applied — safe for at-least-once delivery.
+- **Contract**: The export returns the same root `{ media, youtube_playlist_id, ad_duration_seconds, youtube_duration_minutes, ... }` structure described in Section 3.
+- **Transport swap without UI changes**: A future RabbitMQ adapter implementing the same `subscribe / start / stop / getCurrent` interface can be dropped in (via the global `SMART_RETAIL_ADAPTER = "rabbitmq"`, e.g. `window.LUMEN_ADAPTER`); `app.js` renders uniformly from the data contract.
+---
+
+## 12. Screen Pairing & Management API
+
+Pairing is coordinated by the Node.js dashboard backend (`DASHBOARD_API_BASE_URL` / `PAIRING_API_BASE_URL`, commonly `http://localhost:3000`). A screen record is stored in the `screens` collection with a `status` of `PENDING` or `ACTIVE`, a pairing code, and a 10-minute expiry.
+
+### Pairing Flow
+
+1. **Dashboard generates a code** — `POST /api/screens/initiate-pairing` with `{ "businessId": "<objectId>" }` (authenticated). Creates a `PENDING` screen row and returns a 6-digit code:
+   ```json
+   { "success": true, "pairingCode": "123456" }
+   ```
+2. **Display enters the code** — the kiosk pairs itself via `POST /api/screens/complete-pairing`:
+   ```json
+   { "pairingCode": "123456", "deviceId": "device-1730000000000-ab12cd" }
+   ```
+   On success the row flips to `ACTIVE`, is assigned `deviceId` / `pairedAt`, and the pairing code is cleared.
+
+### Endpoints
+
+| Method | Path | Auth | Request | Response |
+| --- | --- | --- | --- | --- |
+| `POST` | `/api/screens/initiate-pairing` | Auth0 JWT | `{ "businessId": "..." }` | `{ "success": true, "pairingCode": "123456" }` |
+| `POST` | `/api/screens/complete-pairing` | None | `{ "pairingCode": "123456", "deviceId": "device-..." }` | `{ "success": true, "message": "...", "screen": {...} }` |
+| `GET` | `/api/screens?businessId=<id>` | Auth0 JWT | — | `{ "success": true, "screens": [...] }` (newest first) |
+| `GET` | `/api/screens/:deviceId/playlist` | None | — | `{ "success": true, "playlist": [<mediaUrl>, ...] }` |
+
+### Display Behaviour
+
+- The kiosk generates a `deviceId` on first launch (`device-<timestamp>-<random>`), persists it in `localStorage` under `smart-retail-display-deviceId`, and shows the pairing view until a successful `complete-pairing`.
+- Once paired, the display hides the pairing view and resumes the normal ad/YouTube cycle.
+- The dashboard's **Manage Screens** page polls `GET /api/screens?businessId=...` (every 15 s) so a newly connected screen appears automatically.
+
+---
+
+## 13. Paystack Webhook
+
+After a successful payment, Paystack delivers a webhook to the FastAPI backend:
+
+- **Endpoint**: `POST /api/paystack/webhook`
+- **Signature**: HMAC-SHA512 over the raw request body using `PAYSTACK_SECRET_KEY`, sent in the `x-paystack-signature` header. Requests without a valid signature are rejected with `401`.
+- **Handling**: Only `charge.success` events are processed; the product is resolved from `data.metadata.product_id`, and the shelf service unlocks the matching GPIO pin for `UNLOCK_DURATION_SECONDS`.
+
+### Handler behaviour
+
+| Condition | Response |
+| --- | --- |
+| Valid signature, `charge.success`, known product | `200 { "received": true, "processed": true, "product_id": "...", "gpio_pin": 17 }` |
+| Valid signature, non-`charge.success` event | `200 { "received": true, "processed": false, "reason": "ignored_event" }` |
+| Missing `metadata.product_id` | `422` |
+| Unknown product | `422` |
+| Invalid or missing signature | `401` |
+| Malformed JSON | `400` |

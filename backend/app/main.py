@@ -27,6 +27,7 @@ def create_app(controller=None) -> FastAPI:
             "https://app.zuke.co.za",
             "https://zuke.co.za",
             "http://localhost:3000", # Common for local dashboard development
+            "http://localhost:8000", # Frontend for Smart Retail Display
         ],
         allow_credentials=True,
         allow_methods=["*"],

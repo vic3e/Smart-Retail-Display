@@ -1,6 +1,7 @@
 :root { color-scheme: dark; font-family: 'Hanken Grotesk', Arial, sans-serif; background: #0a0f1e; --zuke: #ff8b00; --zuke-deep: #ff7b00; --text: #f4f6fb; --muted: #9aa7c7; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grotesk', Arial, sans-serif; }
+html { background-color: #0a0f1e; }
+body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grotesk', Arial, sans-serif; background-color: #0a0f1e; color: #fff; }
 .signage, .stage { width: 100vw; height: 100vh; }
 .signage { position: relative; background: radial-gradient(120% 120% at 20% 0%, #141c33 0%, #0a0f1e 45%, #060a16 100%); }
 .stage { position: absolute; inset: 0; background: transparent; }
@@ -23,10 +24,14 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
 .caption-name { margin: 0; font-size: clamp(2rem, 5vw, 5.5rem); font-weight: 800; letter-spacing: -.04em; }
 
 /* ── Payment QR overlay ─────────────────────────────────────────────────── */
-.payment-overlay { position: absolute; z-index: 4; display: grid; place-items: center; gap: .65rem; right: 5vw; bottom: 9vh; min-width: 10rem; padding: 1rem; color: #0a0f1e; background: rgba(255,255,255,.97); border-radius: .9rem; box-shadow: 0 .8rem 2.8rem rgba(0,0,0,.45); border-left: 3px solid var(--zuke); }
+.payment-overlay { position: absolute; z-index: 4; display: grid; place-items: center; gap: .65rem; right: 5vw; bottom: 9vh; min-width: 10rem; padding: 1rem; color: #0a0f1e; background: rgba(255,255,255,.97); border-radius: .9rem; box-shadow: 0 .8rem 2.8rem rgba(0,0,0,.45); border-left: 3px solid var(--zuke); transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
 .payment-overlay p { margin: 0; font-weight: 700; font-size: 1rem; }.qr-code { width: 140px; height: 140px; background: white; }.qr-code img, .qr-code canvas { display: block; width: 140px !important; height: 140px !important; }
 
 /* ── YouTube entertainment ──────────────────────────────────────────────── */
+#media-stage {
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 #youtube-stage {
   transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -96,8 +101,86 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
   display: none; /* Hide label entirely in mini mode to keep it clean */
 }
 
+/* ── Sidebar Layout (YouTube Default View-style) ────────────────────────── */
+body.sidebar-layout #media-stage {
+  width: 68vw;
+  right: auto; /* Cancel default inset: 0 */
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.sidebar-layout #youtube-stage.mini {
+  width: 32vw;
+  height: 100vh;
+  left: auto;
+  right: 0;
+  top: 0;
+  transform: none;
+  border-radius: 0;
+  border: none;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  background-color: #060a16;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 4vh;
+  z-index: 10;
+}
+
+body.sidebar-layout #youtube-stage.mini #youtube-player {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+}
+
+body.sidebar-layout .payment-overlay {
+  right: 2vw;
+  width: 28vw;
+  bottom: 6vh;
+  left: auto;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 2.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border-left: 4px solid var(--zuke);
+  color: #fff;
+  gap: 15px;
+}
+
+body.sidebar-layout .payment-overlay .qr-code {
+  padding: 10px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  display: block;
+}
+
+body.sidebar-layout .payment-overlay p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+  margin-top: 5px;
+  text-shadow: none;
+}
+
+body.sidebar-layout .progress {
+  width: 68vw;
+}
+
 /* ── Progress ───────────────────────────────────────────────────────────── */
-.progress { position: absolute; z-index: 15; bottom: 0; left: 0; height: 6px; width: 100%; background: rgba(255,255,255,0.18); }
+.progress { position: absolute; z-index: 15; bottom: 0; left: 0; height: 6px; width: 100%; background: rgba(255,255,255,0.18); transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
 #progress-bar { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--zuke), var(--zuke-deep)); transition: width 1s linear; }
 
 /* ── Image Zoom Animation ───────────────────────────────────────────────── */
@@ -115,7 +198,86 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
 .empty-state h1 { margin: .25rem 0 1rem; font-size: clamp(2.5rem, 7vw, 7rem); line-height: 1; }
 .empty-state p { font-size: clamp(1.1rem, 2vw, 2rem); color: #d5e1f5; }
 .eyebrow { color: var(--zuke); font-weight: 800; letter-spacing: .2em; }
+/* Utility */
 .hidden { display: none !important; }
+
+/* Pairing View Styles (from player index.html) */
+#pairing-view {
+    width: 100%;
+    max-width: 400px;
+    padding: 2rem;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #1a1a1a;
+    color: white;
+    font-family: -apple-system, BlinkMacMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+#pairing-view h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+#pairing-code-input {
+    width: 100%;
+    padding: 15px;
+    font-size: 2rem;
+    text-align: center;
+    letter-spacing: 10px;
+    background-color: #333;
+    border: 1px solid #555;
+    color: white;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+#pair-button {
+    width: 100%;
+    padding: 15px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    background-color: #007bff;
+    border: none;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+#pair-button:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+.error-message {
+    color: #ff4d4d;
+    margin-top: 1rem;
+    min-height: 1.2rem;
+}
+
+/* Player View Styles (from player index.html) */
+#player-view {
+    width: 100%;
+    height: 100%;
+    background-color: #000;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#video-player {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Use 'contain' to avoid cropping, or 'cover' to fill */
+}
 
 /* ── Master Mute Toggle ─────────────────────────────────────────────────── */
 .master-mute {

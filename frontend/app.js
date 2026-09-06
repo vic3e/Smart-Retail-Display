@@ -1,5 +1,6 @@
-(() => {
-  "use strict";
+import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from './config.js';
+
+"use strict";
   const MAX_AD_CYCLE_MS = 5 * 60_000;
   const DEFAULT_SCHEDULE = {
     morning: { start: "05:00", end: "11:30" },
@@ -17,6 +18,8 @@
     morningPlaylists: [],
     afternoonPlaylists: [],
     eveningPlaylists: [],
+    youtubePlayNowId: "",
+    youtubePlayNextId: "",
     schedule: DEFAULT_SCHEDULE
   };
   const ZUKE_LOGO = "https://res.cloudinary.com/dekgwsl3c/image/upload/v1765557660/Wide_Logos_v2_Zuke_Logo_Wide_White_shv9wx.webp";
@@ -40,13 +43,20 @@
     muteIconOff: document.querySelector("#mute-icon-off"),
     splash: document.querySelector("#splash-screen"),
     splashBar: document.querySelector("#splash-progress"),
-    entertainmentLabel: document.querySelector(".entertainment-label")
+    entertainmentLabel: document.querySelector(".entertainment-label"),
+    // New elements for pairing view
+    pairingView: document.querySelector('#pairing-view'),
+    pairingCodeInput: document.querySelector('#pairing-code-input'),
+    pairButton: document.querySelector('#pair-button'),
+    errorMessage: document.querySelector('#error-message'),
   };
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
   let labelTimeoutId = null;
   let store = { content: null, hasZuke: false };
   let ytPlayer = null, ytReady = false, masterMuted = localStorage.getItem("masterMuted") === "true";
   const ytVideoQueues = {};
+  let deviceId = null; // Only deviceId state is needed for pairing
+  let isPlayingOverride = false;
 
   function handleLabelAnimation() {
     if (!elements.entertainmentLabel) return;
@@ -115,6 +125,73 @@
       else if (!elements.video.classList.contains("hidden")) elements.video.muted = false;
     }
   });
+
+  // ── Pairing / first-run device registration ────────────────────────────────
+  function hideAllContentViews() {
+    // Only hide the pairing view. The main content elements (media-stage, brandBar, etc.)
+    // are managed by showAd/startEntertainment directly.
+    if (elements.pairingView) elements.pairingView.classList.add("hidden");
+  }
+
+  function showPairingView() {
+    // Hide all main content elements before showing pairing view
+    elements.mediaStage.classList.add("hidden");
+    elements.youtubeStage.classList.add("hidden");
+    elements.brandBar.classList.add("hidden");
+    elements.caption.classList.add("hidden");
+    elements.payment.classList.add("hidden");
+    elements.masterMute.classList.add("hidden");
+    if (elements.entertainmentLabel) elements.entertainmentLabel.classList.add("hidden");
+    if (elements.pairingView) elements.pairingView.classList.remove("hidden");
+    document.body.classList.remove("sidebar-layout");
+  }
+
+  function activateContentCycle() {
+    if (elements.pairingView) elements.pairingView.classList.add("hidden");
+    elements.mediaStage.classList.remove("hidden");
+    elements.brandBar.classList.remove("hidden");
+    elements.masterMute.classList.remove("hidden");
+    startCycle();
+  }
+
+  const generateDeviceId = () => {
+    return `device-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  const handlePairing = async () => {
+    if (!elements.pairingCodeInput || !elements.errorMessage || !elements.pairButton) return;
+    const pairingCode = elements.pairingCodeInput.value.replace(/-/g, '').trim();
+    if (pairingCode.length !== 6) {
+      elements.errorMessage.textContent = 'Please enter a valid 6-digit code.';
+      return;
+    }
+
+    elements.pairButton.disabled = true;
+    elements.pairButton.textContent = 'Connecting...';
+    elements.errorMessage.textContent = '';
+
+    try {
+      const response = await fetch(`${PAIRING_API_BASE_URL}/api/screens/complete-pairing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairingCode, deviceId })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        localStorage.setItem('smart-retail-display-deviceId', deviceId);
+        activateContentCycle();
+      } else {
+        throw new Error(result.error || 'Pairing failed. Please check the code and try again.');
+      }
+    } catch (error) {
+      console.error('Pairing error:', error);
+      elements.errorMessage.textContent = error.message || 'Pairing failed. Please check the code and try again.';
+      elements.pairButton.disabled = false;
+      elements.pairButton.textContent = 'Connect';
+    }
+  };
 
   const ALLOWED_ORIENTATIONS = ["landscape", "portrait", "square"];
   const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -192,15 +269,24 @@
   }
 
   function buildCyclePlaylist(mediaList, cfg, maxAdCycleMs) {
-    const eligible = getEligibleMedia(mediaList, cfg.schedule);
-    if (!eligible.length) return [];
+    const allUsable = (Array.isArray(mediaList) ? mediaList : []).filter(usable);
+    if (!allUsable.length) return [];
 
     const maxSlots = Math.max(1, Math.floor(maxAdCycleMs / cfg.adDurationMs));
-    let pool = eligible.flatMap((ad) =>
-      Array.from({ length: Math.min(ad.play_count || 1, maxSlots) }, () => ad)
-    );
 
-    pool = shuffleArray(pool);
+    // Play Now / Play Next overrides bypass the time-slot filter — they are
+    // explicit user actions and should play regardless of the current slot.
+    const playNow = allUsable.filter((a) => a.play_now);
+    const playNext = allUsable.filter((a) => a.play_next && !a.play_now);
+
+    // Normal loop pool (time-slot filtered), shuffled with de-dupe vs last ad.
+    const normalPool = getEligibleMedia(allUsable, cfg.schedule)
+      .filter((a) => !a.play_now && !a.play_next)
+      .flatMap((ad) =>
+        Array.from({ length: Math.min(ad.play_count || 1, maxSlots) }, () => ad)
+      );
+
+    const pool = shuffleArray(normalPool);
 
     const uniqueAdIds = new Set(pool.map((a) => a.id));
     if (uniqueAdIds.size > 1 && lastPlayedAdId && pool[0] && pool[0].id === lastPlayedAdId) {
@@ -212,7 +298,37 @@
       }
     }
 
-    return pool.slice(0, maxSlots);
+    // Order: Play Now → first ad of the normal loop → Play Next → rest of loop.
+    // Play Next therefore lands immediately after whatever is playing next.
+    const ordered = [...playNow, ...pool.slice(0, 1), ...playNext, ...pool.slice(1)];
+    return ordered.slice(0, maxSlots);
+  }
+
+  // ── Override acknowledgement (Play Now / Play Next) ─────────────────────
+  // The display tells the dashboard "this override actually played", so it is
+  // cleared and not re-queued on the next poll.
+  function dashboardApiBase() {
+    const zukeUrl = queryParams.get("zuke") || window.ZUKE_EXPORT_URL;
+    if (zukeUrl) {
+      try { return new URL(zukeUrl).origin; } catch (e) { /* ignore */ }
+    }
+    return window.DASHBOARD_API_BASE_URL || PAIRING_API_BASE_URL;
+  }
+  function acknowledgePlayedAd(ad) {
+    if (!ad || !ad.id) return;
+    fetch(dashboardApiBase() + "/api/display-ads/ack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adId: ad.id })
+    }).catch(() => { /* Override simply re-queues if ack fails. */ });
+  }
+  function acknowledgePlaylistOverride(playlistId) {
+    if (!playlistId) return;
+    fetch(dashboardApiBase() + "/api/display-ads/ack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playlistId })
+    }).catch(() => { /* Override simply re-queues if ack fails. */ });
   }
 
   function parse(payload) {
@@ -247,6 +363,8 @@
       morningPlaylists: morning,
       afternoonPlaylists: afternoon,
       eveningPlaylists: evening,
+      youtubePlayNowId: typeof data.youtube_play_now === "string" ? data.youtube_play_now.trim() : (config.youtubePlayNowId || ""),
+      youtubePlayNextId: typeof data.youtube_play_next === "string" ? data.youtube_play_next.trim() : (config.youtubePlayNextId || ""),
       schedule: validateSchedule(data.schedule)
     };
     rawMediaList = Array.isArray(data.media) ? data.media : [];
@@ -271,7 +389,8 @@
       return;
     }
     try {
-      let resp = await fetch("/api/media", { cache: "no-store" });
+      let resp = await fetch(`${MEDIA_API_BASE_URL}/api/media`, { cache: "no-store" });
+      if (!resp.ok) resp = await fetch("/api/media", { cache: "no-store" });
       if (!resp.ok) resp = await fetch("media.json", { cache: "no-store" });
       if (!resp.ok) throw new Error("Media request failed (" + resp.status + ")");
       const data = await resp.json();
@@ -293,8 +412,31 @@
     store.hasZuke = true;
     store.content = content;
     parse(content);
+
+    // If we are currently playing a YouTube override, do NOT restart the cycle.
+    // This prevents the next poll (which carries the cleared override) from interrupting playback.
+    if (isPlayingOverride) {
+      if (config.youtubePlayNowId) {
+        // There is a NEW override, let's play it!
+        clearTimeout(timeoutId);
+        startEntertainment(true);
+      }
+      return;
+    }
+
     clearTimeout(timeoutId);
-    startCycle();
+    // Only start the content cycle once the display has been paired.
+    if (deviceId && !(elements.pairingView && !elements.pairingView.classList.contains("hidden"))) {
+      // A queued "Play Video Now" jumps straight into entertainment so it
+      // interrupts on the next display poll (~30s) instead of waiting for the
+      // ad cycle to finish.
+      if (config.youtubePlayNowId) {
+        isPlayingOverride = true;
+        startEntertainment(true);
+      } else {
+        startCycle();
+      }
+    }
   }
 
   function hideMedia() {
@@ -331,11 +473,13 @@
     if (!playlist.length) return showEmpty();
     const ad = playlist[index];
     lastPlayedAdId = ad.id;
+    if (ad.play_now || ad.play_next) acknowledgePlayedAd(ad);
     renderBrand(ad);
 
     // Keep YouTube stage visible but in mini mode
     elements.youtubeStage.classList.remove("hidden");
     elements.youtubeStage.classList.add("mini");
+    document.body.classList.add("sidebar-layout");
 
     elements.mediaStage.classList.remove("hidden");
     elements.mediaStage.dataset.orientation = ad.orientation || "unspecified";
@@ -399,16 +543,23 @@
     const slot = getCurrentTimeSlot(config.schedule);
     let list = [];
 
+    // Honor a queued Play Now / Play Next YouTube playlist first.
+    if (config.youtubePlayNowId) list.push(config.youtubePlayNowId);
+    if (config.youtubePlayNextId && config.youtubePlayNextId !== config.youtubePlayNowId) list.push(config.youtubePlayNextId);
+
+    const slotList = [];
     if (slot === "morning") {
-      list = [...config.morningPlaylists, ...config.eveningPlaylists];
+      slotList.push(...config.morningPlaylists, ...config.eveningPlaylists);
     } else if (slot === "afternoon") {
-      list = [...config.afternoonPlaylists];
+      slotList.push(...config.afternoonPlaylists);
     } else if (slot === "evening") {
-      list = [...config.eveningPlaylists, ...config.morningPlaylists];
+      slotList.push(...config.eveningPlaylists, ...config.morningPlaylists);
     }
 
     // Fallback to legacy/general lists if slot-specific lists are empty
-    if (!list.length) {
+    if (slotList.length) {
+      list.push(...slotList);
+    } else {
       if (config.playlistId) list.push(config.playlistId);
       (config.fallbackPlaylists || []).forEach((p) => {
         const pid = String(p || "").trim();
@@ -637,6 +788,37 @@
 
   // Unified YouTube playback router honoring youtubeMode ("api", "normal", "both")
   function playYouTubeMedia(forceNew = false) {
+    // A queued "Play Now / Play Next" entertainment override always wins over
+    // resume and random selection, so a pasted YouTube link plays immediately.
+    const overrideId = config.youtubePlayNowId || config.youtubePlayNextId;
+    if (overrideId) {
+      console.log("[YouTube] Playing queued entertainment override:", overrideId);
+      acknowledgePlaylistOverride(overrideId);
+      config.youtubePlayNowId = "";
+      config.youtubePlayNextId = "";
+      handleLabelAnimation();
+      if (config.youtubeMode === "normal") {
+        playPlaylist(overrideId);
+      } else if (config.youtubeMode === "api") {
+        // STRICT API MODE: No fallback to normal embed on error.
+        playWithApi(overrideId).catch((err) => {
+          console.error("[YouTube API Mode Error] Strict API mode active — will NOT fallback to normal embed. Error:", err.message);
+        });
+      } else {
+        // "both" mode: Try API mode first if apiKey is present; fallback to normal embed on error
+        const apiKey = config.apiKey || window.YOUTUBE_API_KEY;
+        if (apiKey) {
+          playWithApi(overrideId).catch((err) => {
+            console.warn("[YouTube Both Mode] API mode encountered an error, falling back to normal embed:", err.message);
+            playPlaylist(overrideId);
+          });
+        } else {
+          playPlaylist(overrideId);
+        }
+      }
+      return;
+    }
+
     const state = getYTState();
     // Only resume if the saved video is from within the last 12 hours (freshness)
     const lastSave = localStorage.getItem("yt_last_save_ts") || "0";
@@ -699,7 +881,7 @@
     // However, the requirement is to "keep playing".
   }
 
-  function startEntertainment() {
+  function startEntertainment(force = false) {
     hideMedia();
     elements.mediaStage.classList.add("hidden");
     elements.payment.classList.add("hidden");
@@ -707,6 +889,7 @@
     // Transition YouTube to full screen
     elements.youtubeStage.classList.remove("hidden");
     elements.youtubeStage.classList.remove("mini");
+    document.body.classList.remove("sidebar-layout");
     renderBrand(null);
 
     ensureYTPlayer().then(() => {
@@ -715,12 +898,12 @@
       
       try {
         const state = ytPlayer.getPlayerState();
-        if (state !== 1 && state !== 3) {
-          playYouTubeMedia();
+        if (force || (state !== 1 && state !== 3)) {
+          playYouTubeMedia(force);
         }
       } catch (e) {
         // If player isn't ready for getPlayerState, just force play
-        playYouTubeMedia();
+        playYouTubeMedia(force);
       }
       return undefined;
     }).catch(() => {});
@@ -729,6 +912,7 @@
   }
 
   async function startCycle() {
+    isPlayingOverride = false;
     clearTimeout(timeoutId);
     index = 0;
     // Don't hide YouTube here, just load media and show ads
@@ -739,7 +923,7 @@
 
   // ── Subscribe to Zuke publications (transport-agnostic seam). ────────────
   const queryParams = new URLSearchParams(window.location.search);
-  const ZUKE_EXPORT_URL = queryParams.get("zuke") || window.ZUKE_EXPORT_URL || "https://app.zuke.co.za/api/display-ads/export";
+  const ZUKE_EXPORT_URL = queryParams.get("zuke") || window.ZUKE_EXPORT_URL || (DASHBOARD_API_BASE_URL ? `${DASHBOARD_API_BASE_URL}/api/display-ads/export` : "https://app.zuke.co.za/api/display-ads/export");
   const POLL_INTERVAL_MS = 30_000;
   const adapter = window.createSubscriptionAdapter({ url: ZUKE_EXPORT_URL, intervalMs: POLL_INTERVAL_MS });
   adapter.subscribe(onZukeContent);
@@ -749,27 +933,44 @@
   async function init() {
     // Show progress on splash
     if (elements.splashBar) elements.splashBar.style.width = "30%";
-    
+
     // Load base configuration first (defaults from media.json/api)
     await loadMedia();
     if (elements.splashBar) elements.splashBar.style.width = "45%";
-    
+
     const delay = new Promise((r) => setTimeout(r, 4000));
-    
+
     try {
       await Promise.race([adapter.start(), delay]);
       if (elements.splashBar) elements.splashBar.style.width = "100%";
-      
+
       // Short delay to show 100% then fade
       setTimeout(() => {
         if (elements.splash) elements.splash.classList.add("fade-out");
-        startCycle();
+        readyContent();
       }, 500);
     } catch (e) {
       if (elements.splash) elements.splash.classList.add("fade-out");
-      startCycle();
+      readyContent();
+    }
+  }
+
+  // Decide between the content cycle (already-paired display) and the pairing
+  // view (first launch).
+  function readyContent() {
+    const storedDeviceId = localStorage.getItem('smart-retail-display-deviceId');
+
+    if (elements.pairButton) {
+      elements.pairButton.addEventListener('click', handlePairing);
+    }
+
+    if (storedDeviceId) {
+      deviceId = storedDeviceId;
+      activateContentCycle();
+    } else {
+      deviceId = generateDeviceId();
+      showPairingView();
     }
   }
 
   init();
-})();
