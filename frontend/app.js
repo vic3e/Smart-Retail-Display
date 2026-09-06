@@ -20,6 +20,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     eveningPlaylists: [],
     youtubePlayNowId: "",
     youtubePlayNextId: "",
+    pairedBusinessId: "",
     schedule: DEFAULT_SCHEDULE
   };
   const ZUKE_LOGO = "https://res.cloudinary.com/dekgwsl3c/image/upload/v1765557660/Wide_Logos_v2_Zuke_Logo_Wide_White_shv9wx.webp";
@@ -33,6 +34,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     caption: document.querySelector("#caption"),
     business: document.querySelector("#caption-business"),
     name: document.querySelector("#caption-name"),
+    ask: document.querySelector("#caption-ask"),
     payment: document.querySelector("#payment-overlay"),
     qrCode: document.querySelector("#qr-code"),
     player: document.querySelector("#youtube-player"),
@@ -57,6 +59,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   const ytVideoQueues = {};
   let deviceId = null; // Only deviceId state is needed for pairing
   let isPlayingOverride = false;
+  let firstPlay = true;
 
   function handleLabelAnimation() {
     if (!elements.entertainmentLabel) return;
@@ -181,6 +184,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
       if (result.success) {
         localStorage.setItem('smart-retail-display-deviceId', deviceId);
+        if (result.screen && result.screen.businessId) {
+          localStorage.setItem('smart-retail-display-businessId', result.screen.businessId);
+        }
         activateContentCycle();
       } else {
         throw new Error(result.error || 'Pairing failed. Please check the code and try again.');
@@ -365,6 +371,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       eveningPlaylists: evening,
       youtubePlayNowId: typeof data.youtube_play_now === "string" ? data.youtube_play_now.trim() : (config.youtubePlayNowId || ""),
       youtubePlayNextId: typeof data.youtube_play_next === "string" ? data.youtube_play_next.trim() : (config.youtubePlayNextId || ""),
+      pairedBusinessId: typeof data.display_business_id === "string" ? data.display_business_id.trim() : (config.pairedBusinessId || ""),
       schedule: validateSchedule(data.schedule)
     };
     rawMediaList = Array.isArray(data.media) ? data.media : [];
@@ -459,8 +466,20 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     timeoutId = setTimeout(next, duration);
   }
   function renderQr(url) {
+    if (!elements.qrCode) return;
     elements.qrCode.replaceChildren();
-    if (window.QRCode) new window.QRCode(elements.qrCode, { text: url, width: 140, height: 140, correctLevel: window.QRCode.CorrectLevel.M });
+    if (!url || url === 'https://paystack.com/pay/') {
+      elements.payment.classList.add("hidden");
+      return;
+    }
+    elements.payment.classList.remove("hidden");
+    if (window.QRCode) {
+      try {
+        new window.QRCode(elements.qrCode, { text: url, width: 140, height: 140, correctLevel: window.QRCode.CorrectLevel.M });
+      } catch (e) {
+        console.error("Failed to render QR Code:", e);
+      }
+    }
   }
 
   function showEmpty() {
@@ -485,7 +504,15 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     elements.mediaStage.dataset.orientation = ad.orientation || "unspecified";
     elements.empty.classList.add("hidden");
     elements.caption.classList.remove("hidden");
-    elements.payment.classList.remove("hidden");
+    
+    // Toggle "Ask in Store" badge if the ad belongs to this paired store
+    const pairedBusinessId = localStorage.getItem('smart-retail-display-businessId') || config.pairedBusinessId || '';
+    if (pairedBusinessId && ad.business_id === pairedBusinessId && elements.ask) {
+      elements.ask.classList.remove("hidden");
+    } else if (elements.ask) {
+      elements.ask.classList.add("hidden");
+    }
+
     elements.business.textContent = ad.business_name;
     elements.name.textContent = ad.name;
     renderQr(ad.paystack_url);
@@ -893,9 +920,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     renderBrand(null);
 
     ensureYTPlayer().then(() => {
-      if (masterMuted) ytPlayer.mute();
+      if (masterMuted || firstPlay) ytPlayer.mute();
       else if (ytPlayer.unMute) ytPlayer.unMute();
-      
+
       try {
         const state = ytPlayer.getPlayerState();
         if (force || (state !== 1 && state !== 3)) {
@@ -911,6 +938,16 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     schedule(startCycle, config.youtubeDurationMs);
   }
 
+  // Unmute the player on the first click/interaction with the screen to satisfy browser autoplay policies
+  document.addEventListener("click", () => {
+    if (firstPlay) {
+      firstPlay = false;
+      if (ytPlayer && typeof ytPlayer.unMute === "function" && !masterMuted) {
+        ytPlayer.unMute();
+      }
+    }
+  });
+
   async function startCycle() {
     isPlayingOverride = false;
     clearTimeout(timeoutId);
@@ -923,7 +960,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
   // ── Subscribe to Zuke publications (transport-agnostic seam). ────────────
   const queryParams = new URLSearchParams(window.location.search);
-  const ZUKE_EXPORT_URL = queryParams.get("zuke") || window.ZUKE_EXPORT_URL || (DASHBOARD_API_BASE_URL ? `${DASHBOARD_API_BASE_URL}/api/display-ads/export` : "https://app.zuke.co.za/api/display-ads/export");
+  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : '';
+  const defaultExportUrl = DASHBOARD_API_BASE_URL ? `${DASHBOARD_API_BASE_URL}/api/display-ads/export${deviceIdParam}` : `https://app.zuke.co.za/api/display-ads/export${deviceIdParam}`;
+  const ZUKE_EXPORT_URL = queryParams.get("zuke") || window.ZUKE_EXPORT_URL || defaultExportUrl;
   const POLL_INTERVAL_MS = 30_000;
   const adapter = window.createSubscriptionAdapter({ url: ZUKE_EXPORT_URL, intervalMs: POLL_INTERVAL_MS });
   adapter.subscribe(onZukeContent);

@@ -374,3 +374,20 @@ body.sidebar-layout .progress {
   visibility: hidden;
 }
 
+/* ── Ask in Store Badge ─────────────────────────────────────────────────── */
+.badge-ask {
+  display: inline-block;
+  background: var(--zuke);
+  color: #0a0f1e;
+  padding: 6px 16px;
+  border-radius: 10px;
+  font-size: clamp(0.85rem, 1.2vw, 1.2rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 1.5vh;
+  box-shadow: 0 4px 16px rgba(255, 139, 0, 0.3);
+  text-shadow: none; /* overrides parent text shadow for perfect readability */
+  transition: all 0.3s ease;
+}
+
