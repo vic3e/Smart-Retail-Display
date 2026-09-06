@@ -485,6 +485,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
   function showEmpty() {
     renderBrand(null);
+    elements.caption.classList.add("hidden");
     // When empty, we show YouTube full screen as entertainment
     startEntertainment();
   }
@@ -913,6 +914,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     hideMedia();
     elements.mediaStage.classList.add("hidden");
     elements.payment.classList.add("hidden");
+    elements.caption.classList.add("hidden");
 
     // Transition YouTube to full screen
     elements.youtubeStage.classList.remove("hidden");
