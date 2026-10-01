@@ -37,6 +37,7 @@ echo "Launching $CHROMIUM_BIN in kiosk mode with hardware GPU acceleration..."
   --enable-gpu-rasterization \
   --enable-zero-copy \
   --use-gl=egl \
+  --password-store=basic \
   --enable-features=VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization \
   "http://127.0.0.1:8000"
 
