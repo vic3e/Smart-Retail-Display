@@ -816,7 +816,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (listId.length === 11 && !listId.startsWith("PL")) {
       ytPlayer.loadVideoById({
         videoId: listId,
-        suggestedQuality: 'default'
+        suggestedQuality: 'hd720'
       });
     } else {
       // Use the most compatible loading method for playlists/mixes
@@ -824,7 +824,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         list: listId,
         listType: 'playlist',
         index: 0,
-        suggestedQuality: 'default'
+        suggestedQuality: 'hd720'
       };
       
       // If it's a Mix (not starting with PL), YouTube requires slightly different handling
