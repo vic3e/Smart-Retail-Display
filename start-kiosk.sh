@@ -22,6 +22,9 @@ else
   exit 1
 fi
 
+echo "Clearing Chromium temporary cache to prevent stale layout issues..."
+rm -rf ~/.cache/chromium/
+
 echo "Launching $CHROMIUM_BIN in kiosk mode..."
 # Launch Chromium in crash-resilient, GPU-accelerated full kiosk mode
 "$CHROMIUM_BIN" --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required "http://127.0.0.1:8000"

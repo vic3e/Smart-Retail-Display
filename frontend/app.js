@@ -52,6 +52,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     pairButton: document.querySelector('#pair-button'),
     errorMessage: document.querySelector('#error-message'),
     pairingQrImage: document.querySelector('#pairing-qr-image'),
+    captionBar: document.querySelector('#caption-bar'),
   };
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
   let labelTimeoutId = null;
@@ -185,6 +186,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     elements.caption.classList.add("hidden");
     elements.payment.classList.add("hidden");
     elements.masterMute.classList.add("hidden");
+    if (elements.captionBar) elements.captionBar.classList.add("hidden");
     if (elements.entertainmentLabel) elements.entertainmentLabel.classList.add("hidden");
     if (elements.pairingView) elements.pairingView.classList.remove("hidden");
     document.body.classList.remove("sidebar-layout");
@@ -200,6 +202,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     elements.mediaStage.classList.remove("hidden");
     elements.brandBar.classList.remove("hidden");
     elements.masterMute.classList.remove("hidden");
+    if (elements.captionBar) elements.captionBar.classList.remove("hidden");
     startCycle();
   }
 
