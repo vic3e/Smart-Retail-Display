@@ -51,6 +51,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     pairingCodeInput: document.querySelector('#pairing-code-input'),
     pairButton: document.querySelector('#pair-button'),
     errorMessage: document.querySelector('#error-message'),
+    pairingQrImage: document.querySelector('#pairing-qr-image'),
   };
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
   let labelTimeoutId = null;
@@ -136,6 +137,46 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (elements.pairingView) elements.pairingView.classList.add("hidden");
   }
 
+  let pairingPollInterval = null;
+
+  function displayPairingQrCode() {
+    if (!elements.pairingQrImage) return;
+    const dashboardPairingUrl = `${DASHBOARD_API_BASE_URL}/screens/pair?deviceId=${encodeURIComponent(deviceId)}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(dashboardPairingUrl)}`;
+    elements.pairingQrImage.src = qrCodeUrl;
+  }
+
+  function startPairingPoll() {
+    if (pairingPollInterval) clearInterval(pairingPollInterval);
+    pairingPollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${PAIRING_API_BASE_URL}/api/screens/${encodeURIComponent(deviceId)}/playlist`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            clearInterval(pairingPollInterval);
+            localStorage.setItem('smart-retail-display-deviceId', deviceId);
+            if (data.businessId) {
+              localStorage.setItem('smart-retail-display-businessId', data.businessId);
+            } else if (data.screen && data.screen.businessId) {
+              localStorage.setItem('smart-retail-display-businessId', data.screen.businessId);
+            }
+            activateContentCycle();
+          }
+        }
+      } catch (error) {
+        console.warn('Pairing status poll error:', error);
+      }
+    }, 5000);
+  }
+
+  function stopPairingPoll() {
+    if (pairingPollInterval) {
+      clearInterval(pairingPollInterval);
+      pairingPollInterval = null;
+    }
+  }
+
   function showPairingView() {
     // Hide all main content elements before showing pairing view
     elements.mediaStage.classList.add("hidden");
@@ -147,9 +188,14 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (elements.entertainmentLabel) elements.entertainmentLabel.classList.add("hidden");
     if (elements.pairingView) elements.pairingView.classList.remove("hidden");
     document.body.classList.remove("sidebar-layout");
+
+    // Display QR Code & start background polling
+    displayPairingQrCode();
+    startPairingPoll();
   }
 
   function activateContentCycle() {
+    stopPairingPoll();
     if (elements.pairingView) elements.pairingView.classList.add("hidden");
     elements.mediaStage.classList.remove("hidden");
     elements.brandBar.classList.remove("hidden");

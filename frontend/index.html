@@ -38,10 +38,23 @@
       <!-- Pairing View: Shown on first launch for retail displays -->
       <div id="pairing-view" class="stage hidden">
           <h1>Connect to Your Account</h1>
-          <p>Enter the code from your Zuke dashboard</p>
-          <input type="text" id="pairing-code-input" placeholder="123-456" maxlength="7">
-          <button id="pair-button">Connect</button>
-          <p id="error-message" class="error-message"></p>
+          <div class="pairing-container">
+              <div class="pairing-qr-section">
+                  <h2>Scan to Connect</h2>
+                  <div class="qr-code-wrapper">
+                      <img id="pairing-qr-image" src="" alt="Pairing QR Code">
+                  </div>
+                  <p class="qr-instructions">Scan this QR code with your phone's camera to instantly pair this screen.</p>
+              </div>
+              <div class="pairing-divider"></div>
+              <div class="pairing-code-section">
+                  <h2>Manual Connect</h2>
+                  <p>Or enter the 6-digit code shown on your Zuke dashboard:</p>
+                  <input type="text" id="pairing-code-input" placeholder="123-456" maxlength="7">
+                  <button id="pair-button">Connect</button>
+                  <p id="error-message" class="error-message"></p>
+              </div>
+          </div>
       </div>
 
       <section id="media-stage" class="stage" aria-label="Retail promotion">

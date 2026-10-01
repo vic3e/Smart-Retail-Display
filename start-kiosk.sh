@@ -11,6 +11,18 @@ while [ $i -lt 60 ]; do
   sleep 1
 done
 
-echo "Backend is online! Launching Chromium in kiosk mode..."
+echo "Backend is online! Detecting Chromium binary..."
+# Detect whether chromium-browser or chromium is installed
+if command -v chromium-browser >/dev/null 2>&1; then
+  CHROMIUM_BIN="chromium-browser"
+elif command -v chromium >/dev/null 2>&1; then
+  CHROMIUM_BIN="chromium"
+else
+  echo "Error: Chromium is not installed! Please install it with 'sudo apt install chromium-browser -y'" >&2
+  exit 1
+fi
+
+echo "Launching $CHROMIUM_BIN in kiosk mode..."
 # Launch Chromium in crash-resilient, GPU-accelerated full kiosk mode
-chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required "http://127.0.0.1:8000"
+"$CHROMIUM_BIN" --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required "http://127.0.0.1:8000"
+
