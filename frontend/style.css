@@ -464,3 +464,9 @@ body.sidebar-layout .progress {
   font-family: 'Hanken Grotesk', sans-serif;
 }
 
+/* Hide mouse cursor globally for clean digital signage display (cross-platform, Wayland & X11 compatible) */
+html, body, * {
+  cursor: none !important;
+}
+
+

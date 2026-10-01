@@ -13,36 +13,76 @@ It is split into two primary integration tracks:
 When providing a pre-configured player to a merchant, the goal is a **zero-maintenance, zero-mouse, crash-resilient appliance** that boots directly into the signage fullscreen mode and recovers automatically from power or network failures.
 
 ### A. Raspberry Pi OS Setup (The Gold Standard)
-Raspberry Pi 4 or 5 is the recommended signage hardware. The official Raspberry Pi OS (Debian Bookworm) uses the **Wayfire** window manager.
+Raspberry Pi 4 or 5 is the recommended signage hardware. The official Raspberry Pi OS (Debian Bookworm) uses either **Labwc** or **Wayfire** as its window manager.
 
-#### 1. Hide the Mouse Cursor
-Install `unclutter` to automatically hide the mouse cursor after 2 seconds of inactivity:
+#### 1. Setup Kiosk Auto-Start Script
+To avoid a race condition where Chromium attempts to load the page before your backend has finished starting up, use a helper script to wait for port 8000 (or your Render URL) to become available.
+
+1. Create `start-kiosk.sh` in your project folder:
 ```bash
-sudo apt update
-sudo apt install unclutter -y
+nano ~/Smart-Retail-Display/start-kiosk.sh
 ```
 
-#### 2. Configure Wayfire Autostart
-Open the user Wayfire configuration file:
+2. Add the following content (changing the URL to your Render deployment `"https://lumen-qdvs.onrender.com/"` if displaying from the cloud):
+```bash
+#!/bin/bash
+# Wait up to 60 seconds for the backend to start
+TARGET_URL="http://127.0.0.1:8000" # Change to "https://lumen-qdvs.onrender.com/" if using cloud
+
+echo "Waiting for Lumen Digital Signage backend on $TARGET_URL..."
+i=0
+while [ $i -lt 60 ]; do
+  if curl -s -o /dev/null "$TARGET_URL" 2>/dev/null; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 1
+done
+
+echo "Backend is online! Launching Chromium in kiosk mode..."
+# Launch Chromium in crash-resilient, GPU-accelerated full kiosk mode
+chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required "$TARGET_URL"
+```
+
+3. Make the script executable:
+```bash
+chmod +x ~/Smart-Retail-Display/start-kiosk.sh
+```
+
+*(Note: We hide the mouse cursor globally in the application's CSS stylesheet `style.css` using `cursor: none !important;` so legacy X11 utilities like `unclutter` are no longer needed on Wayland environments).*
+
+#### 2. Configure Compositor Autostart
+
+##### Option 1: For Labwc (Latest Raspberry Pi OS Default)
+1. Ensure the directory exists and open the autostart file:
+```bash
+mkdir -p ~/.config/labwc
+nano ~/.config/labwc/autostart
+```
+2. Add the following to start the launcher script:
+```bash
+~/Smart-Retail-Display/start-kiosk.sh &
+```
+3. Disable screen blanking at the system level:
+```bash
+sudo raspi-config nonint do_blanking 1
+```
+
+##### Option 2: For Wayfire (Older Raspberry Pi OS Bookworm)
+1. Open the Wayfire configuration file:
 ```bash
 nano ~/.config/wayfire.ini
 ```
-*(If the file does not exist, check `/etc/xdg/lxsession/LXDE-pi/autostart` if running an older X11-based Raspberry Pi OS).*
-
-Append or modify the `[autostart]` block:
+2. Append or modify the `[autostart]` block:
 ```ini
 [autostart]
-# 1. Disable screensaver and Display Power Management Signaling (prevent sleep)
+# Disable screensaver and Display Power Management Signaling (prevent sleep)
 screensaver = false
 dpms = false
 
-# 2. Hide cursor on idle
-cursor_hide = unclutter -idle 2
-
-# 3. Open Chromium in crash-resilient kiosk mode pointing to Render
-chromium = chromium-browser --kiosk --noerrdialogs --disable-infobars --check-for-update-interval=604800 "https://lumen-qdvs.onrender.com/"
+# Open Chromium in crash-resilient kiosk mode pointing to launcher script
+chromium = ~/Smart-Retail-Display/start-kiosk.sh
 ```
-*Note: The `--noerrdialogs` and `--disable-infobars` flags are critical. They prevent Chromium from showing "Chromium did not shut down correctly. Restore tabs?" when the store turns off the mains power at night.*
 
 ---
 
