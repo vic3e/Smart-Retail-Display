@@ -27,6 +27,9 @@ def test_media_endpoint_returns_only_active_paid_valid_adverts(tmp_path, monkeyp
         "youtube_duration_minutes": 10,
         "youtube_mode": "both",
         "youtube_api_key": "",
+        "youtube_morning_playlists": [],
+        "youtube_afternoon_playlists": [],
+        "youtube_evening_playlists": [],
         "schedule": DEFAULT_SCHEDULE,
     }
 
@@ -41,6 +44,9 @@ def test_invalid_json_and_playback_config_fall_back_safely(tmp_path):
         "youtube_duration_minutes": 10,
         "youtube_mode": "both",
         "youtube_api_key": "",
+        "youtube_morning_playlists": [],
+        "youtube_afternoon_playlists": [],
+        "youtube_evening_playlists": [],
         "schedule": DEFAULT_SCHEDULE,
     }
     media_file.write_text(json.dumps({"media": [], "ad_duration_seconds": 0, "youtube_duration_minutes": "ten"}), encoding="utf-8")

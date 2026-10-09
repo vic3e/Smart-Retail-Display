@@ -53,6 +53,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     errorMessage: document.querySelector('#error-message'),
     pairingQrImage: document.querySelector('#pairing-qr-image'),
     captionBar: document.querySelector('#caption-bar'),
+    videoPreload: document.querySelector('#video-preload'),
   };
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
   let labelTimeoutId = null;
@@ -496,6 +497,69 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     }
   }
 
+  // ── Media preloading & buffering ─────────────────────────────────────────
+  const preloadedUrls = new Set();
+
+  function preloadMediaItem(ad) {
+    if (!ad || !ad.media_url || preloadedUrls.has(ad.media_url)) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      if (ad.media_type === "video") {
+        const vid = elements.videoPreload || document.createElement("video");
+        const onCanPlay = () => {
+          cleanup();
+          preloadedUrls.add(ad.media_url);
+          resolve();
+        };
+        const onError = () => {
+          cleanup();
+          resolve();
+        };
+        const cleanup = () => {
+          vid.removeEventListener("canplay", onCanPlay);
+          vid.removeEventListener("error", onError);
+        };
+        vid.addEventListener("canplay", onCanPlay, { once: true });
+        vid.addEventListener("error", onError, { once: true });
+        vid.preload = "auto";
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.src = ad.media_url;
+        vid.load();
+        setTimeout(() => { cleanup(); resolve(); }, 3500);
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          preloadedUrls.add(ad.media_url);
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = ad.media_url;
+      }
+    });
+  }
+
+  async function preloadPlaylistAssets(items, onProgress) {
+    if (!items || !items.length) return;
+    let completed = 0;
+    for (const item of items) {
+      await preloadMediaItem(item);
+      completed++;
+      if (typeof onProgress === "function") {
+        onProgress(completed, items.length);
+      }
+    }
+  }
+
+  function preloadNextAd(currentIndex) {
+    if (!playlist || playlist.length <= 1) return;
+    const nextIndex = (currentIndex + 1) % playlist.length;
+    const nextAd = playlist[nextIndex];
+    if (nextAd) {
+      preloadMediaItem(nextAd);
+    }
+  }
+
   function hideMedia() {
     elements.image.classList.remove("image-zoom");
     elements.image.classList.add("hidden");
@@ -570,17 +634,37 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     hideMedia();
 
     if (ad.media_type === "video") {
+      // 1. Pause YouTube during video ads so Pi hardware decoder only handles one video
+      if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
+        ytPlayer.pauseVideo();
+      }
+
       elements.image.removeAttribute("src");
       elements.video.classList.remove("hidden");
-      elements.video.src = ad.media_url;
-      elements.video.load();
-      // If it's a video ad, we unmute it (if not master muted) and mute YouTube
       elements.video.muted = masterMuted;
-      elements.video.play().catch(() => {
-        console.warn("Video autoplay was blocked, muting to retry");
-        elements.video.muted = true;
-        elements.video.play();
-      });
+
+      let started = false;
+      const startPlayback = () => {
+        if (started) return;
+        started = true;
+        elements.video.play().catch(() => {
+          console.warn("Video autoplay was blocked, muting to retry");
+          elements.video.muted = true;
+          elements.video.play().catch(() => {});
+        });
+      };
+
+      // If video is already buffered, play immediately; otherwise wait for canplay
+      if (elements.video.src === ad.media_url && elements.video.readyState >= 3) {
+        elements.video.currentTime = 0;
+        startPlayback();
+      } else {
+        elements.video.src = ad.media_url;
+        elements.video.load();
+        elements.video.addEventListener("canplay", startPlayback, { once: true });
+        // Safety timeout so a slow network doesn't delay playback indefinitely
+        setTimeout(startPlayback, 1200);
+      }
     } else {
       elements.video.removeAttribute("src");
       elements.image.classList.remove("hidden");
@@ -600,15 +684,21 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         };
       }
       elements.image.src = ad.media_url;
+
+      // Resume YouTube in mini mode during image ads
+      ensureYTPlaying().then(() => {
+        if (ytPlayer) {
+          if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
+          if (typeof ytPlayer.mute === "function") {
+            if (masterMuted) ytPlayer.mute();
+            else if (ytPlayer.unMute) ytPlayer.unMute();
+          }
+        }
+      });
     }
 
-    // Handle YouTube playback and muting
-    ensureYTPlaying().then(() => {
-      if (ytPlayer && typeof ytPlayer.mute === "function") {
-        if (masterMuted || ad.media_type === "video") ytPlayer.mute();
-        else ytPlayer.unMute();
-      }
-    });
+    // Preload next ad in the playlist for instant, zero-stutter transitions
+    preloadNextAd(index);
 
     const proceed = () => { index += 1; index < playlist.length ? showAd() : startEntertainment(); };
     const target = ad.media_type === "video" ? elements.video : elements.image;
@@ -1023,7 +1113,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   // published content; falls back to /api/media|media.json within ~4s.
   async function init() {
     // Show progress on splash
-    if (elements.splashBar) elements.splashBar.style.width = "30%";
+    if (elements.splashBar) elements.splashBar.style.width = "25%";
 
     // Load base configuration first (defaults from media.json/api)
     await loadMedia();
@@ -1033,17 +1123,32 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     try {
       await Promise.race([adapter.start(), delay]);
-      if (elements.splashBar) elements.splashBar.style.width = "100%";
-
-      // Short delay to show 100% then fade
-      setTimeout(() => {
-        if (elements.splash) elements.splash.classList.add("fade-out");
-        readyContent();
-      }, 500);
     } catch (e) {
+      // Ignore
+    }
+
+    if (elements.splashBar) elements.splashBar.style.width = "65%";
+
+    // Preload initial playlist media so the first ads play smoothly without skipping
+    try {
+      const initialPlaylist = buildCyclePlaylist(rawMediaList, config, MAX_AD_CYCLE_MS);
+      if (initialPlaylist && initialPlaylist.length > 0) {
+        await preloadPlaylistAssets(initialPlaylist.slice(0, 4), (completed, total) => {
+          const pct = 65 + Math.round((completed / Math.min(total, 4)) * 30);
+          if (elements.splashBar) elements.splashBar.style.width = pct + "%";
+        });
+      }
+    } catch (e) {
+      console.warn("Preload failed during splash:", e);
+    }
+
+    if (elements.splashBar) elements.splashBar.style.width = "100%";
+
+    // Short delay to show 100% then fade
+    setTimeout(() => {
       if (elements.splash) elements.splash.classList.add("fade-out");
       readyContent();
-    }
+    }, 400);
   }
 
   // Decide between the content cycle (already-paired display) and the pairing
