@@ -794,16 +794,23 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       }
       elements.image.src = ad.media_url;
 
-      // Resume YouTube in mini mode during image ads
-      ensureYTPlaying().then(() => {
-        if (ytPlayer && !isAdVideoPlaying) {
-          if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
-          if (typeof ytPlayer.mute === "function") {
-            if (masterMuted) ytPlayer.mute();
-            else if (ytPlayer.unMute) ytPlayer.unMute();
-          }
+      // Resume entertainment in mini mode during image ads
+      if (config.entertainmentSource === "live_channel") {
+        if (elements.livePlayer) {
+          elements.livePlayer.muted = masterMuted;
+          elements.livePlayer.play().catch(() => {});
         }
-      });
+      } else {
+        ensureYTPlaying().then(() => {
+          if (ytPlayer && !isAdVideoPlaying) {
+            if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
+            if (typeof ytPlayer.mute === "function") {
+              if (masterMuted) ytPlayer.mute();
+              else if (ytPlayer.unMute) ytPlayer.unMute();
+            }
+          }
+        });
+      }
     }
 
     // Preload next ad in the playlist for instant, zero-stutter transitions
@@ -1305,6 +1312,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   }
 
   function ensureYTPlaying() {
+    if (config.entertainmentSource === "live_channel") return Promise.resolve();
     return ensureYTPlayer().then(() => {
       if (!ytPlayer || typeof ytPlayer.getPlayerState !== "function") return;
       const state = ytPlayer.getPlayerState();
@@ -1405,8 +1413,29 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (ad.play_now || ad.play_next) acknowledgePlayedAd(ad);
     renderBrand(ad);
 
-    elements.youtubeStage.classList.remove("hidden");
-    elements.youtubeStage.classList.add("mini");
+    // Entertainment mini player: live channel vs YouTube
+    const isLive = config.entertainmentSource === "live_channel";
+    if (isLive) {
+      if (elements.youtubeStage) {
+        elements.youtubeStage.classList.add("hidden");
+        if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
+          try { ytPlayer.pauseVideo(); } catch (e) {}
+        }
+      }
+      if (elements.livePlayer) {
+        elements.livePlayer.classList.remove("hidden");
+        elements.livePlayer.classList.add("mini");
+        elements.livePlayer.muted = true;
+        initLivePlayer(config.liveChannelUrl);
+      }
+    } else {
+      if (elements.livePlayer) {
+        elements.livePlayer.classList.add("hidden");
+        elements.livePlayer.pause();
+      }
+      elements.youtubeStage.classList.remove("hidden");
+      elements.youtubeStage.classList.add("mini");
+    }
     document.body.classList.add("sidebar-layout");
 
     elements.mediaStage.classList.remove("hidden");
@@ -1438,6 +1467,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
           if (typeof ytPlayer.mute === "function") ytPlayer.mute();
           if (typeof ytPlayer.pauseVideo === "function") ytPlayer.pauseVideo();
         } catch (e) {}
+      }
+      if (elements.livePlayer) {
+        elements.livePlayer.muted = true;
       }
 
       elements.image.removeAttribute("src");
@@ -1490,15 +1522,22 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         setTimeout(startPlay, 1000);
       }
     } else {
-      ensureYTPlaying().then(() => {
-        if (ytPlayer && !isAdVideoPlaying) {
-          if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
-          if (typeof ytPlayer.mute === "function") {
-            if (masterMuted) ytPlayer.mute();
-            else if (ytPlayer.unMute) ytPlayer.unMute();
-          }
+      if (config.entertainmentSource === "live_channel") {
+        if (elements.livePlayer) {
+          elements.livePlayer.muted = masterMuted;
+          elements.livePlayer.play().catch(() => {});
         }
-      });
+      } else {
+        ensureYTPlaying().then(() => {
+          if (ytPlayer && !isAdVideoPlaying) {
+            if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
+            if (typeof ytPlayer.mute === "function") {
+              if (masterMuted) ytPlayer.mute();
+              else if (ytPlayer.unMute) ytPlayer.unMute();
+            }
+          }
+        });
+      }
     }
 
     let advanced = false;
