@@ -1,4 +1,4 @@
-import struct, os
+import struct, os, shutil
 
 header = struct.pack('<4sIII', b'Xcur', 16, 0x10000, 1)
 toc = struct.pack('<III', 0xfffd0002, 1, 28)
@@ -6,7 +6,8 @@ img_hdr = struct.pack('<IIIIIIIII', 40, 0xfffd0002, 1, 1, 1, 1, 0, 0, 0)
 pixel = struct.pack('<I', 0)
 data = header + toc + img_hdr + pixel
 
-cursor_dir = os.path.expanduser('~/.icons/default/cursors')
+# 1. Install dedicated transparent theme (separate from system default)
+cursor_dir = os.path.expanduser('~/.icons/transparent/cursors')
 os.makedirs(cursor_dir, exist_ok=True)
 base_file = os.path.join(cursor_dir, 'left_ptr')
 with open(base_file, 'wb') as f:
@@ -25,28 +26,23 @@ for a in aliases:
             with open(target, 'wb') as f:
                 f.write(data)
 
-theme_file = os.path.expanduser('~/.icons/default/index.theme')
+theme_file = os.path.expanduser('~/.icons/transparent/index.theme')
 with open(theme_file, 'w') as f:
-    f.write('[Icon Theme]\nName=Default\nComment=Transparent Cursor Theme\nInherits=default\n')
+    f.write('[Icon Theme]\nName=transparent\nComment=Transparent Cursor Theme\nInherits=transparent\n')
 
-# Configure labwc environment file
-env_dir = os.path.expanduser('~/.config/labwc')
-os.makedirs(env_dir, exist_ok=True)
-env_file = os.path.join(env_dir, 'environment')
+# 2. Clean up any overrides in ~/.icons/default so desktop is 100% normal
+old_default = os.path.expanduser('~/.icons/default')
+if os.path.exists(old_default):
+    shutil.rmtree(old_default, ignore_errors=True)
 
-existing = ''
+# 3. Restore labwc environment file to desktop defaults (clean out global cursor overrides)
+env_file = os.path.expanduser('~/.config/labwc/environment')
 if os.path.exists(env_file):
     with open(env_file, 'r') as f:
-        existing = f.read()
+        lines = f.readlines()
+    clean_lines = [l for l in lines if 'XCURSOR_THEME' not in l and 'XCURSOR_SIZE' not in l]
+    with open(env_file, 'w') as f:
+        f.writelines(clean_lines)
 
-lines = []
-if 'XCURSOR_THEME' not in existing:
-    lines.append('XCURSOR_THEME=default')
-if 'XCURSOR_SIZE' not in existing:
-    lines.append('XCURSOR_SIZE=1')
+print('Independent transparent cursor theme installed; desktop defaults restored!')
 
-if lines:
-    with open(env_file, 'a') as f:
-        f.write('\n' + '\n'.join(lines) + '\n')
-
-print('Transparent cursor theme and Labwc environment successfully installed!')

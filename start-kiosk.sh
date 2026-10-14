@@ -34,6 +34,10 @@ fi
 echo "Clearing Chromium temporary cache to prevent stale layout issues..."
 rm -rf ~/.cache/chromium/
 
+# Hide cursor ONLY for this Chromium kiosk window (keeps desktop cursor normal on Alt+F4)
+export XCURSOR_THEME=transparent
+export XCURSOR_SIZE=1
+
 echo "Launching $CHROMIUM_BIN in kiosk mode..."
 # Launch Chromium in crash-resilient, GPU-accelerated full kiosk mode
 "$CHROMIUM_BIN" \

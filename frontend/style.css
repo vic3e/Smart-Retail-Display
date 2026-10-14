@@ -59,7 +59,7 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
   display: none;
 }
 
-#youtube-player { width: 100%; height: 100%; display: block; border: 0; }
+#youtube-player { width: 100%; height: 100%; display: block; border: 0; pointer-events: none; }
 .entertainment-label { 
   position: absolute; 
   z-index: 2; 
