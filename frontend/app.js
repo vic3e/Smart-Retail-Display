@@ -817,6 +817,24 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     return [...new Set(list.map(s => String(s || "").trim()).filter(Boolean))];
   }
 
+  // Ensure YouTube negotiates Full HD 1080p whenever available
+  function boostVideoQuality() {
+    if (!ytPlayer) return;
+    try {
+      if (typeof ytPlayer.getAvailableQualityLevels === "function") {
+        const levels = ytPlayer.getAvailableQualityLevels();
+        if (Array.isArray(levels) && levels.length) {
+          const target = ["hd1080", "highres", "hd720"].find((lvl) => levels.includes(lvl));
+          if (target && typeof ytPlayer.setPlaybackQuality === "function") {
+            ytPlayer.setPlaybackQuality(target);
+          }
+        }
+      } else if (typeof ytPlayer.setPlaybackQuality === "function") {
+        ytPlayer.setPlaybackQuality("hd1080");
+      }
+    } catch (e) {}
+  }
+
   // Lazily load the YouTube IFrame API and create the player (strictly single instance).
   function ensureYTPlayer() {
     if (ytReady && ytPlayer) return Promise.resolve(ytPlayer);
@@ -864,23 +882,6 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
               origin: origin
             },
             events: { 
-  function boostVideoQuality() {
-    if (!ytPlayer) return;
-    try {
-      if (typeof ytPlayer.getAvailableQualityLevels === "function") {
-        const levels = ytPlayer.getAvailableQualityLevels();
-        if (Array.isArray(levels) && levels.length) {
-          const target = ["hd1080", "highres", "hd720"].find((lvl) => levels.includes(lvl));
-          if (target && typeof ytPlayer.setPlaybackQuality === "function") {
-            ytPlayer.setPlaybackQuality(target);
-          }
-        }
-      } else if (typeof ytPlayer.setPlaybackQuality === "function") {
-        ytPlayer.setPlaybackQuality("hd1080");
-      }
-    } catch (e) {}
-  }
-
               onReady: () => { 
                 if (timeoutTimer) clearTimeout(timeoutTimer);
                 timeoutTimer = null;
