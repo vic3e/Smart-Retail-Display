@@ -941,12 +941,20 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 console.error("[YouTube Player Error " + e.data + "]:", msg);
                 
                 // If a video fails to play (e.g. embedding restricted or deleted),
-                // we should skip to the next one to keep the entertainment loop running.
+                // we should acknowledge the override so it doesn't stick, and resume playback.
                 if ([100, 101, 150].includes(e.data)) {
-                  console.log("[YouTube] Error is fatal for this video, skipping...");
-                  // Clear the saved state so we don't loop on the same broken video
+                  console.warn("[YouTube] Error " + e.data + " (embedding restricted or removed). Resuming schedule...");
                   localStorage.removeItem("yt_last_video_id");
                   localStorage.removeItem("yt_last_time");
+                  if (pendingOverrideToAck) {
+                    acknowledgePlaylistOverride(pendingOverrideToAck);
+                    pendingOverrideToAck = null;
+                  }
+                  if (isPlayingOverride) {
+                    isPlayingOverride = false;
+                    startCycle();
+                    return;
+                  }
                   setTimeout(() => {
                     playYouTubeMedia(true);
                   }, 1000);
