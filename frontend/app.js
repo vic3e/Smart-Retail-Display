@@ -65,6 +65,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   let isPlayingOverride = false;
   let firstPlay = false;
   let isAdVideoPlaying = false;
+  let isCycleActive = false;
 
   function handleLabelAnimation() {
     if (!elements.entertainmentLabel) return;
@@ -484,18 +485,25 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       return;
     }
 
-    clearTimeout(timeoutId);
-    // Only start the content cycle once the display has been paired.
+    // Urgent YouTube override: interrupt immediately
+    if (config.youtubePlayNowId) {
+      isPlayingOverride = true;
+      clearTimeout(timeoutId);
+      startEntertainment(true);
+      return;
+    }
+
+    // If an ad cycle is ALREADY actively running on screen, do NOT interrupt it mid-play!
+    // The new playlist is already parsed into memory and will be picked up smoothly
+    // when the current ad completes or on the next transition.
+    if (isCycleActive) {
+      console.log("[Zuke] Live content update received and queued for next transition.");
+      return;
+    }
+
+    // Only start the content cycle once the display has been paired and ready.
     if (deviceId && !(elements.pairingView && !elements.pairingView.classList.contains("hidden"))) {
-      // A queued "Play Video Now" jumps straight into entertainment so it
-      // interrupts on the next display poll (~30s) instead of waiting for the
-      // ad cycle to finish.
-      if (config.youtubePlayNowId) {
-        isPlayingOverride = true;
-        startEntertainment(true);
-      } else {
-        startCycle();
-      }
+      startCycle();
     }
   }
 
@@ -1153,14 +1161,138 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     }
   });
 
+  function prepareFirstAdBehindSplash() {
+    stopPairingPoll();
+    if (elements.pairingView) elements.pairingView.classList.add("hidden");
+    if (elements.masterMute) elements.masterMute.classList.remove("hidden");
+
+    if (!playlist.length) {
+      showEmpty();
+      return;
+    }
+
+    index = 0;
+    isCycleActive = true;
+    const ad = playlist[0];
+    lastPlayedAdId = ad.id;
+    if (ad.play_now || ad.play_next) acknowledgePlayedAd(ad);
+    renderBrand(ad);
+
+    elements.youtubeStage.classList.remove("hidden");
+    elements.youtubeStage.classList.add("mini");
+    document.body.classList.add("sidebar-layout");
+
+    elements.mediaStage.classList.remove("hidden");
+    elements.mediaStage.dataset.orientation = ad.orientation || "unspecified";
+    elements.empty.classList.add("hidden");
+    elements.caption.classList.remove("hidden");
+    if (elements.captionBar) elements.captionBar.classList.remove("hidden");
+
+    const pairedBusinessId = localStorage.getItem('smart-retail-display-businessId') || config.pairedBusinessId || '';
+    if (pairedBusinessId && ad.business_id === pairedBusinessId && elements.ask) {
+      elements.ask.classList.remove("hidden");
+    } else if (elements.ask) {
+      elements.ask.classList.add("hidden");
+    }
+
+    elements.business.textContent = decodeEntities(ad.business_name);
+    elements.name.textContent = decodeEntities(ad.name);
+    renderQr(ad.paystack_url);
+    hideMedia();
+
+    elements.image.onerror = null;
+    elements.video.onerror = null;
+
+    if (ad.media_type === "video") {
+      isAdVideoPlaying = true;
+      if (ytPlayer) {
+        try {
+          if (typeof ytPlayer.mute === "function") ytPlayer.mute();
+          if (typeof ytPlayer.pauseVideo === "function") ytPlayer.pauseVideo();
+        } catch (e) {}
+      }
+
+      elements.image.removeAttribute("src");
+      elements.video.classList.remove("hidden");
+      elements.video.muted = masterMuted;
+      elements.video.src = ad.media_url;
+      elements.video.load();
+    } else {
+      isAdVideoPlaying = false;
+      elements.video.removeAttribute("src");
+      elements.image.classList.remove("hidden");
+      elements.image.classList.add("image-zoom");
+      elements.image.style.animationDuration = config.adDurationMs + "ms";
+      if (ad.orientation === "portrait" || ad.orientation === "square") {
+        elements.image.classList.add("contain");
+        elements.image.onload = null;
+      } else if (ad.orientation === "landscape") {
+        elements.image.classList.remove("contain");
+        elements.image.onload = null;
+      } else {
+        elements.image.onload = function onImgLoad() {
+          const ratio = (elements.image.naturalWidth && elements.image.naturalHeight) ? elements.image.naturalWidth / elements.image.naturalHeight : 1;
+          elements.image.classList.toggle("contain", ratio < 1.6);
+          elements.image.onload = null;
+        };
+      }
+      elements.image.src = ad.media_url;
+    }
+
+    preloadNextAd(0);
+  }
+
+  function startActiveAdPlayback() {
+    if (!playlist.length) return showEmpty();
+    const ad = playlist[index];
+    if (ad.media_type === "video") {
+      let started = false;
+      const startPlay = () => {
+        if (started) return;
+        started = true;
+        elements.video.play().catch(() => {
+          elements.video.muted = true;
+          elements.video.play().catch(() => {});
+        });
+      };
+      if (elements.video.readyState >= 3) {
+        startPlay();
+      } else {
+        elements.video.addEventListener("canplay", startPlay, { once: true });
+        setTimeout(startPlay, 1000);
+      }
+    } else {
+      ensureYTPlaying().then(() => {
+        if (ytPlayer && !isAdVideoPlaying) {
+          if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
+          if (typeof ytPlayer.mute === "function") {
+            if (masterMuted) ytPlayer.mute();
+            else if (ytPlayer.unMute) ytPlayer.unMute();
+          }
+        }
+      });
+    }
+
+    let advanced = false;
+    const proceed = () => {
+      if (advanced) return;
+      advanced = true;
+      elements.image.onerror = null;
+      elements.video.onerror = null;
+      index += 1;
+      index < playlist.length ? showAd() : startEntertainment();
+    };
+    const target = ad.media_type === "video" ? elements.video : elements.image;
+    target.onerror = () => { console.warn("Skipping broken media", ad.media_url); proceed(); };
+    schedule(proceed, config.adDurationMs);
+  }
+
   async function startCycle() {
     const runId = ++cycleRunId;
     isPlayingOverride = false;
     clearTimeout(timeoutId);
     index = 0;
-    // Don't hide YouTube here, just load media and show ads
-    await loadMedia();
-    if (runId !== cycleRunId) return;
+    isCycleActive = true;
     playlist = buildCyclePlaylist(rawMediaList, config, MAX_AD_CYCLE_MS);
     showAd();
   }
@@ -1196,9 +1328,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     // Preload initial playlist media so the first ads play smoothly without skipping
     try {
-      const initialPlaylist = buildCyclePlaylist(rawMediaList, config, MAX_AD_CYCLE_MS);
-      if (initialPlaylist && initialPlaylist.length > 0) {
-        await preloadPlaylistAssets(initialPlaylist.slice(0, 4), (completed, total) => {
+      playlist = buildCyclePlaylist(rawMediaList, config, MAX_AD_CYCLE_MS);
+      if (playlist && playlist.length > 0) {
+        await preloadPlaylistAssets(playlist.slice(0, 4), (completed, total) => {
           const pct = 65 + Math.round((completed / Math.min(total, 4)) * 30);
           if (elements.splashBar) elements.splashBar.style.width = pct + "%";
         });
@@ -1209,11 +1341,27 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     if (elements.splashBar) elements.splashBar.style.width = "100%";
 
-    // Short delay to show 100% then fade
+    const storedDeviceId = localStorage.getItem('smart-retail-display-deviceId');
+    if (elements.pairButton) {
+      elements.pairButton.addEventListener('click', handlePairing);
+    }
+
+    if (storedDeviceId) {
+      deviceId = storedDeviceId;
+      // Pre-compose the layout and mount the first ad behind the splash screen!
+      prepareFirstAdBehindSplash();
+    } else {
+      deviceId = generateDeviceId();
+      showPairingView();
+    }
+
+    // Smoothly dissolve the splash screen directly into the active, pre-buffered stage!
     setTimeout(() => {
       if (elements.splash) elements.splash.classList.add("fade-out");
-      readyContent();
-    }, 400);
+      if (storedDeviceId) {
+        startActiveAdPlayback();
+      }
+    }, 450);
   }
 
   // Decide between the content cycle (already-paired display) and the pairing
