@@ -869,6 +869,11 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 timeoutTimer = null;
                 if (ytPlayer !== player) return;
                 ytReady = true; 
+                try {
+                  if (typeof ytPlayer.setPlaybackQuality === "function") {
+                    ytPlayer.setPlaybackQuality("hd720");
+                  }
+                } catch (e) {}
                 if (isAdVideoPlaying && typeof ytPlayer.pauseVideo === "function") {
                   if (typeof ytPlayer.mute === "function") ytPlayer.mute();
                   ytPlayer.pauseVideo();
@@ -877,6 +882,15 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 }
                 resolve(ytPlayer); 
               }, 
+              onPlaybackQualityChange: (e) => {
+                if (e.data && e.data !== "hd720" && e.data !== "medium" && e.data !== "small") {
+                  try {
+                    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === "function") {
+                      ytPlayer.setPlaybackQuality("hd720");
+                    }
+                  } catch (err) {}
+                }
+              },
               onStateChange: (e) => {
                 // State 0 is 'ENDED'
                 if (e.data === 0) {
@@ -892,6 +906,11 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 }
                 // YouTube Player State 1 is 'PLAYING'
                 else if (e.data === 1) {
+                  try {
+                    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === "function") {
+                      ytPlayer.setPlaybackQuality("hd720");
+                    }
+                  } catch (err) {}
                   if (pendingOverrideToAck) {
                     console.log("[YouTube] Video actively playing; acknowledging override:", pendingOverrideToAck);
                     acknowledgePlaylistOverride(pendingOverrideToAck);

@@ -42,11 +42,13 @@ echo "Launching $CHROMIUM_BIN in kiosk mode..."
 # Launch Chromium in crash-resilient, GPU-accelerated full kiosk mode
 "$CHROMIUM_BIN" \
   --kiosk \
+  --ozone-platform=wayland \
+  --enable-gpu-rasterization \
+  --enable-zero-copy \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
   --autoplay-policy=no-user-gesture-required \
   --password-store=basic \
-  --enable-zero-copy \
   "http://127.0.0.1:8000"
 
