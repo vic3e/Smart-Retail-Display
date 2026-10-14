@@ -63,7 +63,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   const ytVideoQueues = {};
   let deviceId = null; // Only deviceId state is needed for pairing
   let isPlayingOverride = false;
-  let firstPlay = true;
+  let firstPlay = false;
+  let isAdVideoPlaying = false;
 
   function handleLabelAnimation() {
     if (!elements.entertainmentLabel) return;
@@ -639,9 +640,13 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     elements.video.onerror = null;
 
     if (ad.media_type === "video") {
-      // 1. Pause YouTube during video ads so Pi hardware decoder only handles one video
-      if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
-        ytPlayer.pauseVideo();
+      isAdVideoPlaying = true;
+      // 1. Immediately pause and mute YouTube so only ONE video and ONE audio plays
+      if (ytPlayer) {
+        try {
+          if (typeof ytPlayer.mute === "function") ytPlayer.mute();
+          if (typeof ytPlayer.pauseVideo === "function") ytPlayer.pauseVideo();
+        } catch (e) {}
       }
 
       elements.image.removeAttribute("src");
@@ -671,6 +676,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         setTimeout(startPlayback, 1200);
       }
     } else {
+      isAdVideoPlaying = false;
       elements.video.removeAttribute("src");
       elements.image.classList.remove("hidden");
       elements.image.classList.add("image-zoom");
@@ -692,7 +698,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
       // Resume YouTube in mini mode during image ads
       ensureYTPlaying().then(() => {
-        if (ytPlayer) {
+        if (ytPlayer && !isAdVideoPlaying) {
           if (typeof ytPlayer.playVideo === "function") ytPlayer.playVideo();
           if (typeof ytPlayer.mute === "function") {
             if (masterMuted) ytPlayer.mute();
@@ -803,7 +809,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
             width: "100%", height: "100%",
             playerVars: { 
               autoplay: 1, 
-              mute: 1, 
+              mute: masterMuted ? 1 : 0, 
               playsinline: 1, 
               rel: 0, 
               modestbranding: 1,
@@ -816,6 +822,12 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 timeoutTimer = null;
                 if (ytPlayer !== player) return;
                 ytReady = true; 
+                if (isAdVideoPlaying && typeof ytPlayer.pauseVideo === "function") {
+                  if (typeof ytPlayer.mute === "function") ytPlayer.mute();
+                  ytPlayer.pauseVideo();
+                } else if (!masterMuted && typeof ytPlayer.unMute === "function") {
+                  ytPlayer.unMute();
+                }
                 resolve(ytPlayer); 
               }, 
               onStateChange: (e) => {
@@ -1100,6 +1112,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   }
 
   function startEntertainment(force = false) {
+    isAdVideoPlaying = false;
     hideMedia();
     elements.mediaStage.classList.add("hidden");
     elements.payment.classList.add("hidden");
@@ -1112,7 +1125,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     renderBrand(null);
 
     ensureYTPlayer().then(() => {
-      if (masterMuted || firstPlay) ytPlayer.mute();
+      if (masterMuted) ytPlayer.mute();
       else if (ytPlayer.unMute) ytPlayer.unMute();
 
       try {

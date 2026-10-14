@@ -34,7 +34,7 @@ fi
 echo "Clearing Chromium temporary cache to prevent stale layout issues..."
 rm -rf ~/.cache/chromium/
 
-echo "Launching $CHROMIUM_BIN in kiosk mode with hardware GPU acceleration..."
+echo "Launching $CHROMIUM_BIN in kiosk mode..."
 # Launch Chromium in crash-resilient, GPU-accelerated full kiosk mode
 "$CHROMIUM_BIN" \
   --kiosk \
@@ -42,11 +42,7 @@ echo "Launching $CHROMIUM_BIN in kiosk mode with hardware GPU acceleration..."
   --disable-infobars \
   --disable-session-crashed-bubble \
   --autoplay-policy=no-user-gesture-required \
-  --ignore-gpu-blocklist \
-  --enable-gpu-rasterization \
-  --enable-zero-copy \
-  --use-gl=egl \
   --password-store=basic \
-  --enable-features=VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization \
+  --enable-zero-copy \
   "http://127.0.0.1:8000"
 
