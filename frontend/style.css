@@ -18,6 +18,29 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
 .brand-bar .brand-biz { max-height: 34px; max-width: 150px; object-fit: contain; background: #fff; padding: 4px 8px; border-radius: 8px; }
 .brand-bar .brand-name { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: .02em; }
 
+/* ── Product Price Badge (top-right of product stage) ──────────────────── */
+.price-badge {
+  position: absolute;
+  z-index: 7;
+  top: 3.5vh;
+  right: 3vw;
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  background: rgba(6, 10, 22, 0.82);
+  border: 2px solid var(--zuke);
+  border-radius: 999px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.2rem, 1.8vw, 2.2rem);
+  letter-spacing: -0.02em;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 16px rgba(255, 139, 0, 0.35);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
 /* ── Caption ────────────────────────────────────────────────────────────── */
 .caption { position: absolute; z-index: 1; left: 7vw; bottom: 11vh; max-width: 48vw; text-shadow: 0 2px 12px #000; }
 .caption-business { margin: 0 0 .7rem; color: var(--zuke); font-size: clamp(.85rem, 1.3vw, 1.25rem); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }

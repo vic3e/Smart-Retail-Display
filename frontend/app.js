@@ -54,6 +54,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     pairingQrImage: document.querySelector('#pairing-qr-image'),
     captionBar: document.querySelector('#caption-bar'),
     videoPreload: document.querySelector('#video-preload'),
+    priceBadge: document.querySelector('#price-badge'),
+    qrLabel: document.querySelector('#qr-label'),
   };
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
   let labelTimeoutId = null;
@@ -66,6 +68,16 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   let firstPlay = false;
   let isAdVideoPlaying = false;
   let isCycleActive = false;
+  let pendingOverrideToAck = null;
+
+  function unwrapMixOrVideoId(id) {
+    const s = String(id || "").trim();
+    // If it's a YouTube Mix (RD + 11-char videoId), unwrap to the 11-char videoId
+    if (s.startsWith("RD") && s.length === 13) {
+      return s.slice(2);
+    }
+    return s;
+  }
 
   function handleLabelAnimation() {
     if (!elements.entertainmentLabel) return;
@@ -372,22 +384,24 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (zukeUrl) {
       try { return new URL(zukeUrl).origin; } catch (e) { /* ignore */ }
     }
-    return window.DASHBOARD_API_BASE_URL || PAIRING_API_BASE_URL;
+    return DASHBOARD_API_BASE_URL || window.DASHBOARD_API_BASE_URL || PAIRING_API_BASE_URL;
   }
   function acknowledgePlayedAd(ad) {
     if (!ad || !ad.id) return;
+    const curDeviceId = deviceId || (typeof localStorage !== "undefined" ? localStorage.getItem("smart-retail-display-deviceId") : null);
     fetch(dashboardApiBase() + "/api/display-ads/ack", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adId: ad.id })
+      body: JSON.stringify({ adId: ad.id, deviceId: curDeviceId })
     }).catch(() => { /* Override simply re-queues if ack fails. */ });
   }
   function acknowledgePlaylistOverride(playlistId) {
     if (!playlistId) return;
+    const curDeviceId = deviceId || (typeof localStorage !== "undefined" ? localStorage.getItem("smart-retail-display-deviceId") : null);
     fetch(dashboardApiBase() + "/api/display-ads/ack", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playlistId })
+      body: JSON.stringify({ playlistId, deviceId: curDeviceId })
     }).catch(() => { /* Override simply re-queues if ack fails. */ });
   }
 
@@ -570,12 +584,30 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     }
   }
 
+  function getProductInfoUrl(ad) {
+    if (!ad) return "";
+    return ad.product_url || ad.info_url || ad.learn_more_url || ad.url || ad.link || ad.paystack_url || "";
+  }
+
+  function renderPrice(price) {
+    if (!elements.priceBadge) return;
+    if (price != null && String(price).trim() !== "") {
+      const formatted = typeof price === "number" ? "R" + price.toLocaleString() : String(price).trim();
+      elements.priceBadge.textContent = formatted;
+      elements.priceBadge.classList.remove("hidden");
+    } else {
+      elements.priceBadge.textContent = "";
+      elements.priceBadge.classList.add("hidden");
+    }
+  }
+
   function hideMedia() {
     elements.image.classList.remove("image-zoom");
     elements.image.classList.add("hidden");
     elements.video.classList.add("hidden");
     elements.video.pause();
     elements.video.muted = true;
+    if (elements.priceBadge) elements.priceBadge.classList.add("hidden");
   }
   function schedule(next, duration) {
     clearTimeout(timeoutId);
@@ -596,6 +628,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       elements.payment.classList.add("hidden");
       return;
     }
+    if (elements.qrLabel) {
+      elements.qrLabel.textContent = "Scan to learn more";
+    }
     elements.payment.classList.remove("hidden");
     if (window.QRCode) {
       try {
@@ -609,6 +644,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   function showEmpty() {
     renderBrand(null);
     elements.caption.classList.add("hidden");
+    if (elements.priceBadge) elements.priceBadge.classList.add("hidden");
     // When empty, we show YouTube full screen as entertainment
     startEntertainment();
   }
@@ -640,8 +676,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     elements.business.textContent = decodeEntities(ad.business_name);
     elements.name.textContent = decodeEntities(ad.name);
-    renderQr(ad.paystack_url);
     hideMedia();
+    renderQr(getProductInfoUrl(ad));
+    renderPrice(ad.price);
 
     // Clear any stale media error handlers from previous adverts before setting up the new one
     elements.image.onerror = null;
@@ -848,6 +885,11 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 }
                 // YouTube Player State 1 is 'PLAYING'
                 else if (e.data === 1) {
+                  if (pendingOverrideToAck) {
+                    console.log("[YouTube] Video actively playing; acknowledging override:", pendingOverrideToAck);
+                    acknowledgePlaylistOverride(pendingOverrideToAck);
+                    pendingOverrideToAck = null;
+                  }
                   const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
                   // isUpcoming is sometimes present in the video data for Premieres
                   if (data && data.isUpcoming === true) {
@@ -966,10 +1008,11 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       });
   }
 
-  function playPlaylist(listId) {
+  function playPlaylist(rawListId) {
     if (!ytPlayer || typeof ytPlayer.loadPlaylist !== "function") return;
     
     handleLabelAnimation();
+    const listId = unwrapMixOrVideoId(rawListId);
     
     // Check if the listId is a video ID or a playlist ID
     // Standard YouTube IDs are 11 chars. Playlists/Mixes are usually much longer or start with PL.
@@ -1003,7 +1046,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   }
 
   // Play using YouTube Data API
-  function playWithApi(listId) {
+  function playWithApi(rawListId) {
+    const listId = unwrapMixOrVideoId(rawListId);
     if (listId.length === 11) {
       if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
         ytPlayer.loadVideoById(listId);
@@ -1031,11 +1075,15 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     const overrideId = config.youtubePlayNowId || config.youtubePlayNextId;
     if (overrideId) {
       console.log("[YouTube] Playing queued entertainment override:", overrideId);
-      acknowledgePlaylistOverride(overrideId);
+      // Arm acknowledgment so it only clears after YouTube enters active PLAYING state (e.data === 1)
+      pendingOverrideToAck = overrideId;
       config.youtubePlayNowId = "";
       config.youtubePlayNextId = "";
       handleLabelAnimation();
-      if (config.youtubeMode === "normal") {
+      
+      const targetId = unwrapMixOrVideoId(overrideId);
+
+      if (config.youtubeMode === "normal" || targetId.length === 11) {
         playPlaylist(overrideId);
       } else if (config.youtubeMode === "api") {
         // STRICT API MODE: No fallback to normal embed on error.
@@ -1197,8 +1245,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     elements.business.textContent = decodeEntities(ad.business_name);
     elements.name.textContent = decodeEntities(ad.name);
-    renderQr(ad.paystack_url);
     hideMedia();
+    renderQr(getProductInfoUrl(ad));
+    renderPrice(ad.price);
 
     elements.image.onerror = null;
     elements.video.onerror = null;
@@ -1299,11 +1348,14 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
   // ── Subscribe to Zuke publications (transport-agnostic seam). ────────────
   const queryParams = new URLSearchParams(window.location.search);
-  const deviceIdParam = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : '';
-  const defaultExportUrl = DASHBOARD_API_BASE_URL ? `${DASHBOARD_API_BASE_URL}/api/display-ads/export${deviceIdParam}` : `https://app.zuke.co.za/api/display-ads/export${deviceIdParam}`;
-  const ZUKE_EXPORT_URL = queryParams.get("zuke") || window.ZUKE_EXPORT_URL || defaultExportUrl;
+  const getExportUrl = () => {
+    const curDeviceId = deviceId || (typeof localStorage !== 'undefined' ? localStorage.getItem('smart-retail-display-deviceId') : null);
+    const dParam = curDeviceId ? `?deviceId=${encodeURIComponent(curDeviceId)}` : '';
+    const base = DASHBOARD_API_BASE_URL || 'https://app.zuke.co.za';
+    return queryParams.get("zuke") || window.ZUKE_EXPORT_URL || `${base}/api/display-ads/export${dParam}`;
+  };
   const POLL_INTERVAL_MS = 30_000;
-  const adapter = window.createSubscriptionAdapter({ url: ZUKE_EXPORT_URL, intervalMs: POLL_INTERVAL_MS });
+  const adapter = window.createSubscriptionAdapter({ url: getExportUrl, intervalMs: POLL_INTERVAL_MS });
   adapter.subscribe(onZukeContent);
 
   // Wait briefly for the first Zuke poll so the initial frame is usually real

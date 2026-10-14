@@ -17,10 +17,21 @@
   "use strict";
 
   function revisionOf(payload) {
-    return payload && typeof payload.revision === "number" ? payload.revision : 0;
+    if (!payload || payload.revision == null) return null;
+    return payload.revision;
   }
   function buildEtag(revision) {
+    if (typeof revision === "string" && revision.startsWith('"')) return revision;
     return '"rev-' + revision + '"';
+  }
+
+  function isNewer(rev, lastRev) {
+    if (rev == null) return false;
+    if (lastRev == null) return true;
+    if (typeof rev === "number" && typeof lastRev === "number") {
+      return rev > lastRev;
+    }
+    return String(rev) !== String(lastRev);
   }
 
   /* ── HTTP pull adapter (today) ───────────────────────────────────────────
@@ -36,6 +47,18 @@
     let timerId = null;
     const listeners = [];
 
+    function resolveUrl() {
+      let url = typeof opts.url === "function" ? opts.url() : opts.url;
+      try {
+        const storedDeviceId = typeof localStorage !== "undefined" ? localStorage.getItem("smart-retail-display-deviceId") : null;
+        if (storedDeviceId && !url.includes("deviceId=")) {
+          const sep = url.includes("?") ? "&" : "?";
+          url += sep + "deviceId=" + encodeURIComponent(storedDeviceId);
+        }
+      } catch (e) { /* ignore */ }
+      return url;
+    }
+
     function emit(payload) {
       current = payload;
       lastRevision = revisionOf(payload);
@@ -49,12 +72,12 @@
       try {
         const headers = { Accept: "application/json" };
         if (lastRevision !== null) headers["If-None-Match"] = buildEtag(lastRevision);
-        response = await fetch(opts.url, { cache: "no-store", headers });
+        response = await fetch(resolveUrl(), { cache: "no-store", headers });
         if (response.status === 304) return current;            // unchanged
         if (!response.ok) throw new Error("HTTP " + response.status);
         const payload = await response.json();
         const rev = revisionOf(payload);
-        if (rev > lastRevision) emit(payload);                          // rev > 0 → fire
+        if (isNewer(rev, lastRevision)) emit(payload);
       } catch (err) {
         console.warn("[SubscriptionAdapter] poll failed:", err && err.message);
       }

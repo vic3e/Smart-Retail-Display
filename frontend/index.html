@@ -28,7 +28,7 @@
     <noscript>
       <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     </noscript>
-    <link rel="stylesheet" href="style.css?v=1.5.0">
+    <link rel="stylesheet" href="style.css?v=1.6.0">
   </head>
   <body>
     <main class="signage" aria-live="polite">
@@ -58,6 +58,7 @@
       </div>
 
       <section id="media-stage" class="stage" aria-label="Retail promotion">
+        <div id="price-badge" class="price-badge hidden"></div>
         <img id="image-media" class="media hidden" alt="">
         <video id="video-media" class="media hidden" preload="auto" muted playsinline></video>
         <video id="video-preload" class="hidden" preload="auto" muted playsinline style="display:none;"></video>
@@ -80,9 +81,9 @@
         </div>
       </footer>
 
-      <aside id="payment-overlay" class="payment-overlay hidden" aria-label="Payment QR code">
+      <aside id="payment-overlay" class="payment-overlay hidden" aria-label="Product info QR code">
         <span id="payment-ask" class="badge-ask hidden">Ask in Store</span>
-        <div id="qr-code" class="qr-code"></div><p>Scan to pay</p>
+        <div id="qr-code" class="qr-code"></div><p id="qr-label">Scan to learn more</p>
       </aside>
 
       <div class="progress"><span id="progress-bar"></span></div>
@@ -94,6 +95,6 @@
     </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="subscription-adapter.js"></script>
-    <script type="module" src="app.js?v=1.5.0"></script>
+    <script type="module" src="app.js?v=1.6.0"></script>
   </body>
 </html>
