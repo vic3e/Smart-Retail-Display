@@ -888,13 +888,17 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
   function initLivePlayer(url) {
     if (!elements.livePlayer || !url) return;
-    if (currentLiveUrl === url && hlsInstance) return;
+    if (currentLiveUrl === url && hlsInstance) {
+      elements.livePlayer.play().catch(() => {});
+      return;
+    }
     currentLiveUrl = url;
 
     if (hlsInstance) {
       try { hlsInstance.destroy(); } catch (e) {}
       hlsInstance = null;
     }
+    elements.livePlayer.removeAttribute("src");
 
     if (window.Hls && window.Hls.isSupported()) {
       hlsInstance = new window.Hls({
@@ -906,6 +910,32 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       hlsInstance.attachMedia(elements.livePlayer);
       hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, () => {
         elements.livePlayer.play().catch(() => {});
+      });
+      hlsInstance.on(window.Hls.Events.ERROR, (event, data) => {
+        if (data && data.fatal) {
+          console.warn("[HLS Error]", data.type, data.details);
+          switch (data.type) {
+            case window.Hls.ErrorTypes.NETWORK_ERROR:
+              console.log("[HLS] Attempting network recovery...");
+              hlsInstance.startLoad();
+              break;
+            case window.Hls.ErrorTypes.MEDIA_ERROR:
+              console.log("[HLS] Attempting media recovery...");
+              hlsInstance.recoverMediaError();
+              break;
+            default:
+              console.error("[HLS] Unrecoverable stream error; falling back to YouTube...");
+              try { hlsInstance.destroy(); } catch (e) {}
+              hlsInstance = null;
+              currentLiveUrl = "";
+              if (elements.livePlayer) elements.livePlayer.classList.add("hidden");
+              if (elements.youtubeStage) {
+                elements.youtubeStage.classList.remove("hidden");
+                playYouTubeMedia(true);
+              }
+              break;
+          }
+        }
       });
     } else if (elements.livePlayer.canPlayType("application/vnd.apple.mpegurl")) {
       elements.livePlayer.src = url;
