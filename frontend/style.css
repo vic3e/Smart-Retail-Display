@@ -154,6 +154,36 @@ body.sidebar-layout #youtube-stage.mini #youtube-player {
   flex-shrink: 0;
 }
 
+/* ── Live Stream Player (HLS) ───────────────────────────────────────────── */
+#live-player {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  background: #000;
+  border: 0;
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 3;
+}
+
+body.sidebar-layout #live-player.mini {
+  width: 32vw;
+  height: 100vh;
+  left: auto;
+  right: 0;
+  top: 0;
+  transform: none;
+  border-radius: 0;
+  border: none;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  background-color: #060a16;
+  object-fit: contain;
+  padding-top: 4vh;
+  z-index: 10;
+}
+
 body.sidebar-layout .payment-overlay {
   right: 2vw;
   width: 28vw;

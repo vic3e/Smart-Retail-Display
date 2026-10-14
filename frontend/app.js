@@ -56,6 +56,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     videoPreload: document.querySelector('#video-preload'),
     priceBadge: document.querySelector('#price-badge'),
     qrLabel: document.querySelector('#qr-label'),
+    livePlayer: document.querySelector('#live-player'),
   };
   let timeoutId, playlist = [], rawMediaList = [], index = 0, lastPlayedAdId = null, config = { ...DEFAULTS };
   let labelTimeoutId = null;
@@ -69,6 +70,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   let isAdVideoPlaying = false;
   let isCycleActive = false;
   let pendingOverrideToAck = null;
+  let hlsInstance = null, currentLiveUrl = "";
 
   function unwrapMixOrVideoId(id) {
     const s = String(id || "").trim();
@@ -140,6 +142,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       else if (!elements.youtubeStage.classList.contains("mini") || (playlist[index] && playlist[index].media_type === "image")) {
         ytPlayer.unMute();
       }
+    }
+    if (elements.livePlayer) {
+      if (masterMuted) elements.livePlayer.muted = true;
+      else if (!elements.livePlayer.classList.contains("mini")) elements.livePlayer.muted = false;
     }
     if (elements.video) {
       if (masterMuted) elements.video.muted = true;
@@ -405,6 +411,16 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     }).catch(() => { /* Override simply re-queues if ack fails. */ });
   }
 
+  function acknowledgeChannelOverride(channelUrl) {
+    if (!channelUrl) return;
+    const curDeviceId = deviceId || (typeof localStorage !== "undefined" ? localStorage.getItem("smart-retail-display-deviceId") : null);
+    fetch(dashboardApiBase() + "/api/display-ads/ack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channelUrl, deviceId: curDeviceId })
+    }).catch(() => {});
+  }
+
   function parse(payload) {
     const data = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
     const validModes = ["api", "normal", "both"];
@@ -437,6 +453,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       morningPlaylists: morning,
       afternoonPlaylists: afternoon,
       eveningPlaylists: evening,
+      entertainmentSource: data.entertainment_source || config.entertainmentSource || "youtube",
+      liveChannelUrl: data.live_channel_url || config.liveChannelUrl || "https://sabcnews.akamaized.net/hls/live/2026847/sabcnews/master.m3u8",
+      liveChannelName: data.live_channel_name || config.liveChannelName || "SABC News",
+      channelPlayNow: typeof data.channel_play_now === "string" ? data.channel_play_now.trim() : "",
       youtubePlayNowId: typeof data.youtube_play_now === "string" ? data.youtube_play_now.trim() : (config.youtubePlayNowId || ""),
       youtubePlayNextId: typeof data.youtube_play_next === "string" ? data.youtube_play_next.trim() : (config.youtubePlayNextId || ""),
       pairedBusinessId: typeof data.display_business_id === "string" ? data.display_business_id.trim() : (config.pairedBusinessId || ""),
@@ -501,6 +521,14 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     // Urgent YouTube override: interrupt immediately
     if (config.youtubePlayNowId) {
+      isPlayingOverride = true;
+      clearTimeout(timeoutId);
+      startEntertainment(true);
+      return;
+    }
+
+    // Urgent Live Channel override: interrupt immediately
+    if (config.channelPlayNow) {
       isPlayingOverride = true;
       clearTimeout(timeoutId);
       startEntertainment(true);
@@ -657,9 +685,29 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (ad.play_now || ad.play_next) acknowledgePlayedAd(ad);
     renderBrand(ad);
 
-    // Keep YouTube stage visible but in mini mode
-    elements.youtubeStage.classList.remove("hidden");
-    elements.youtubeStage.classList.add("mini");
+    // Entertainment mini player: live channel vs YouTube
+    const isLive = config.entertainmentSource === "live_channel";
+    if (isLive) {
+      if (elements.youtubeStage) {
+        elements.youtubeStage.classList.add("hidden");
+        if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
+          try { ytPlayer.pauseVideo(); } catch (e) {}
+        }
+      }
+      if (elements.livePlayer) {
+        elements.livePlayer.classList.remove("hidden");
+        elements.livePlayer.classList.add("mini");
+        elements.livePlayer.muted = true;
+        initLivePlayer(config.liveChannelUrl);
+      }
+    } else {
+      if (elements.livePlayer) {
+        elements.livePlayer.classList.add("hidden");
+        elements.livePlayer.pause();
+      }
+      elements.youtubeStage.classList.remove("hidden");
+      elements.youtubeStage.classList.add("mini");
+    }
     document.body.classList.add("sidebar-layout");
 
     elements.mediaStage.classList.remove("hidden");
@@ -688,12 +736,15 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     if (ad.media_type === "video") {
       isAdVideoPlaying = true;
-      // 1. Immediately pause and mute YouTube so only ONE video and ONE audio plays
+      // 1. Immediately pause and mute YouTube and Live player so only ONE audio plays
       if (ytPlayer) {
         try {
           if (typeof ytPlayer.mute === "function") ytPlayer.mute();
           if (typeof ytPlayer.pauseVideo === "function") ytPlayer.pauseVideo();
         } catch (e) {}
+      }
+      if (elements.livePlayer) {
+        elements.livePlayer.muted = true;
       }
 
       elements.image.removeAttribute("src");
@@ -833,6 +884,33 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         ytPlayer.setPlaybackQuality("hd1080");
       }
     } catch (e) {}
+  }
+
+  function initLivePlayer(url) {
+    if (!elements.livePlayer || !url) return;
+    if (currentLiveUrl === url && hlsInstance) return;
+    currentLiveUrl = url;
+
+    if (hlsInstance) {
+      try { hlsInstance.destroy(); } catch (e) {}
+      hlsInstance = null;
+    }
+
+    if (window.Hls && window.Hls.isSupported()) {
+      hlsInstance = new window.Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30
+      });
+      hlsInstance.loadSource(url);
+      hlsInstance.attachMedia(elements.livePlayer);
+      hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        elements.livePlayer.play().catch(() => {});
+      });
+    } else if (elements.livePlayer.canPlayType("application/vnd.apple.mpegurl")) {
+      elements.livePlayer.src = url;
+      elements.livePlayer.play().catch(() => {});
+    }
   }
 
   // Lazily load the YouTube IFrame API and create the player (strictly single instance).
@@ -1221,27 +1299,51 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (elements.captionBar) elements.captionBar.classList.add("hidden");
     if (elements.priceBadge) elements.priceBadge.classList.add("hidden");
 
-    // Transition YouTube to full screen
-    elements.youtubeStage.classList.remove("hidden");
-    elements.youtubeStage.classList.remove("mini");
     document.body.classList.remove("sidebar-layout");
     renderBrand(null);
 
-    ensureYTPlayer().then(() => {
-      if (masterMuted) ytPlayer.mute();
-      else if (ytPlayer.unMute) ytPlayer.unMute();
+    const isLive = config.entertainmentSource === "live_channel" || !!config.channelPlayNow;
+    if (isLive) {
+      if (elements.youtubeStage) {
+        elements.youtubeStage.classList.add("hidden");
+        if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
+          try { ytPlayer.pauseVideo(); } catch (e) {}
+        }
+      }
+      if (elements.livePlayer) {
+        elements.livePlayer.classList.remove("hidden");
+        elements.livePlayer.classList.remove("mini");
+        elements.livePlayer.muted = masterMuted;
+        initLivePlayer(config.channelPlayNow || config.liveChannelUrl);
+        elements.livePlayer.play().catch(() => {});
+      }
+      if (config.channelPlayNow) {
+        acknowledgeChannelOverride(config.channelPlayNow);
+        config.channelPlayNow = "";
+      }
+    } else {
+      if (elements.livePlayer) {
+        elements.livePlayer.classList.add("hidden");
+        elements.livePlayer.pause();
+      }
+      elements.youtubeStage.classList.remove("hidden");
+      elements.youtubeStage.classList.remove("mini");
 
-      try {
-        const state = ytPlayer.getPlayerState();
-        if (force || (state !== 1 && state !== 3)) {
+      ensureYTPlayer().then(() => {
+        if (masterMuted) ytPlayer.mute();
+        else if (ytPlayer.unMute) ytPlayer.unMute();
+
+        try {
+          const state = ytPlayer.getPlayerState();
+          if (force || (state !== 1 && state !== 3)) {
+            playYouTubeMedia(force);
+          }
+        } catch (e) {
           playYouTubeMedia(force);
         }
-      } catch (e) {
-        // If player isn't ready for getPlayerState, just force play
-        playYouTubeMedia(force);
-      }
-      return undefined;
-    }).catch(() => {});
+        return undefined;
+      }).catch(() => {});
+    }
 
     schedule(startCycle, config.youtubeDurationMs);
   }
