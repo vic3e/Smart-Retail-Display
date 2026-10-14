@@ -864,16 +864,29 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
               origin: origin
             },
             events: { 
+  function boostVideoQuality() {
+    if (!ytPlayer) return;
+    try {
+      if (typeof ytPlayer.getAvailableQualityLevels === "function") {
+        const levels = ytPlayer.getAvailableQualityLevels();
+        if (Array.isArray(levels) && levels.length) {
+          const target = ["hd1080", "highres", "hd720"].find((lvl) => levels.includes(lvl));
+          if (target && typeof ytPlayer.setPlaybackQuality === "function") {
+            ytPlayer.setPlaybackQuality(target);
+          }
+        }
+      } else if (typeof ytPlayer.setPlaybackQuality === "function") {
+        ytPlayer.setPlaybackQuality("hd1080");
+      }
+    } catch (e) {}
+  }
+
               onReady: () => { 
                 if (timeoutTimer) clearTimeout(timeoutTimer);
                 timeoutTimer = null;
                 if (ytPlayer !== player) return;
                 ytReady = true; 
-                try {
-                  if (typeof ytPlayer.setPlaybackQuality === "function") {
-                    ytPlayer.setPlaybackQuality("hd720");
-                  }
-                } catch (e) {}
+                boostVideoQuality();
                 if (isAdVideoPlaying && typeof ytPlayer.pauseVideo === "function") {
                   if (typeof ytPlayer.mute === "function") ytPlayer.mute();
                   ytPlayer.pauseVideo();
@@ -883,12 +896,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 resolve(ytPlayer); 
               }, 
               onPlaybackQualityChange: (e) => {
-                if (e.data && e.data !== "hd720" && e.data !== "medium" && e.data !== "small") {
-                  try {
-                    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === "function") {
-                      ytPlayer.setPlaybackQuality("hd720");
-                    }
-                  } catch (err) {}
+                if (["medium", "small", "tiny", "large"].includes(e.data)) {
+                  setTimeout(boostVideoQuality, 500);
                 }
               },
               onStateChange: (e) => {
@@ -906,11 +915,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 }
                 // YouTube Player State 1 is 'PLAYING'
                 else if (e.data === 1) {
-                  try {
-                    if (ytPlayer && typeof ytPlayer.setPlaybackQuality === "function") {
-                      ytPlayer.setPlaybackQuality("hd720");
-                    }
-                  } catch (err) {}
+                  boostVideoQuality();
                   if (pendingOverrideToAck) {
                     console.log("[YouTube] Video actively playing; acknowledging override:", pendingOverrideToAck);
                     acknowledgePlaylistOverride(pendingOverrideToAck);
@@ -1053,7 +1058,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     if (listId.length === 11 && !listId.startsWith("PL")) {
       ytPlayer.loadVideoById({
         videoId: listId,
-        suggestedQuality: 'hd720'
+        suggestedQuality: 'hd1080'
       });
     } else {
       // Use the most compatible loading method for playlists/mixes
@@ -1061,7 +1066,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         list: listId,
         listType: 'playlist',
         index: 0,
-        suggestedQuality: 'hd720'
+        suggestedQuality: 'hd1080'
       };
       
       // If it's a Mix (not starting with PL), YouTube requires slightly different handling
@@ -1075,7 +1080,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     
     // Ensure we attempt to play
     setTimeout(() => {
-      if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+      if (ytPlayer && ytPlayer.playVideo) {
+        ytPlayer.playVideo();
+        boostVideoQuality();
+      }
     }, 500);
   }
 
@@ -1084,8 +1092,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     const listId = unwrapMixOrVideoId(rawListId);
     if (listId.length === 11) {
       if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
-        ytPlayer.loadVideoById(listId);
+        ytPlayer.loadVideoById({ videoId: listId, suggestedQuality: 'hd1080' });
         ytPlayer.playVideo();
+        boostVideoQuality();
         return Promise.resolve();
       }
       return Promise.reject(new Error("YouTube player not ready"));
@@ -1096,8 +1105,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       }
       const chosen = ytVideoQueues[listId].pop();
       if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
-        ytPlayer.loadVideoById(chosen);
+        ytPlayer.loadVideoById({ videoId: chosen, suggestedQuality: 'hd1080' });
         ytPlayer.playVideo();
+        boostVideoQuality();
       }
     });
   }

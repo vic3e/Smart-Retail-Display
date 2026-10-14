@@ -45,6 +45,7 @@ echo "Launching $CHROMIUM_BIN in kiosk mode..."
   --ozone-platform=wayland \
   --enable-gpu-rasterization \
   --enable-zero-copy \
+  --force-device-scale-factor=1 \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
