@@ -75,6 +75,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   let isCycleActive = false;
   let pendingOverrideToAck = null;
   let hlsInstance = null, currentLiveUrl = "";
+  let activeEntertainmentSource = localStorage.getItem("active_entertainment_source") || "youtube";
+  let scheduledCheckTimer = null;
 
   function unwrapMixOrVideoId(id) {
     const s = String(id || "").trim();
@@ -458,7 +460,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       afternoonPlaylists: afternoon,
       eveningPlaylists: evening,
       entertainmentSource: data.entertainment_source || config.entertainmentSource || "youtube",
-      liveChannelUrl: data.live_channel_url || config.liveChannelUrl || "https://sabcnews.akamaized.net/hls/live/2026847/sabcnews/master.m3u8",
+      liveChannelUrl: data.live_channel_url || config.liveChannelUrl || "https://sabconetanw.cdn.mangomolo.com/news/smil:news.stream.smil/master.m3u8",
       liveChannelName: data.live_channel_name || config.liveChannelName || "SABC News",
       channelPlayNow: typeof data.channel_play_now === "string" ? data.channel_play_now.trim() : "",
       youtubePlayNowId: typeof data.youtube_play_now === "string" ? data.youtube_play_now.trim() : (config.youtubePlayNowId || ""),
@@ -466,6 +468,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       pairedBusinessId: typeof data.display_business_id === "string" ? data.display_business_id.trim() : (config.pairedBusinessId || ""),
       schedule: validateSchedule(data.schedule)
     };
+    if (data.entertainment_source) {
+      activeEntertainmentSource = data.entertainment_source;
+      localStorage.setItem("active_entertainment_source", activeEntertainmentSource);
+    }
     rawMediaList = Array.isArray(data.media) ? data.media : [];
     playlist = buildCyclePlaylist(rawMediaList, config, MAX_AD_CYCLE_MS);
   }
@@ -525,6 +531,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     // Urgent YouTube override: interrupt immediately
     if (config.youtubePlayNowId) {
+      activeEntertainmentSource = "youtube";
+      localStorage.setItem("active_entertainment_source", "youtube");
       isPlayingOverride = true;
       clearTimeout(timeoutId);
       startEntertainment(true);
@@ -533,6 +541,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     // Urgent Live Channel override: interrupt immediately
     if (config.channelPlayNow) {
+      activeEntertainmentSource = "live_channel";
+      localStorage.setItem("active_entertainment_source", "live_channel");
       isPlayingOverride = true;
       clearTimeout(timeoutId);
       startEntertainment(true);
@@ -690,7 +700,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     renderBrand(ad);
 
     // Entertainment mini player: live channel vs YouTube
-    const isLive = config.entertainmentSource === "live_channel";
+    const isLive = activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel";
     if (isLive) {
       if (elements.youtubeStage) {
         elements.youtubeStage.classList.add("hidden");
@@ -799,7 +809,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       elements.image.src = ad.media_url;
 
       // Resume entertainment in mini mode during image ads
-      if (config.entertainmentSource === "live_channel") {
+      if (activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel") {
         if (elements.livePlayer) {
           elements.livePlayer.muted = masterMuted;
           elements.livePlayer.play().catch(() => {});
@@ -895,6 +905,35 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         ytPlayer.setPlaybackQuality("hd1080");
       }
     } catch (e) {}
+  }
+
+  // Guard to detect and skip upcoming premieres, countdowns, and scheduled live streams
+  function checkAndSkipScheduledVideo() {
+    if (!ytPlayer) return false;
+    try {
+      const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
+      const title = (data && data.title) ? data.title.toLowerCase() : "";
+      const dur = typeof ytPlayer.getDuration === "function" ? ytPlayer.getDuration() : 1;
+      
+      const isScheduled = (data && (data.isUpcoming === true || data.isLive === true)) ||
+                          title.includes("premiere in") ||
+                          title.includes("live in ") ||
+                          title.includes("scheduled for") ||
+                          title.includes("waiting for");
+
+      if (isScheduled || (dur === 0 && data && data.isPlayable === false)) {
+        console.warn("[YouTube Guard] Detected scheduled premiere/stream ('" + (data?.title || "") + "'). Skipping immediately...");
+        localStorage.removeItem("yt_last_video_id");
+        localStorage.removeItem("yt_last_time");
+        if (typeof ytPlayer.nextVideo === "function") {
+          ytPlayer.nextVideo();
+        } else {
+          playYouTubeMedia(true);
+        }
+        return true;
+      }
+    } catch (e) {}
+    return false;
   }
 
   function initLivePlayer(url) {
@@ -1007,6 +1046,12 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 if (ytPlayer !== player) return;
                 ytReady = true; 
                 boostVideoQuality();
+                checkAndSkipScheduledVideo();
+                if (activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel") {
+                  if (typeof ytPlayer.mute === "function") ytPlayer.mute();
+                  if (typeof ytPlayer.pauseVideo === "function") ytPlayer.pauseVideo();
+                  return;
+                }
                 if (isAdVideoPlaying && typeof ytPlayer.pauseVideo === "function") {
                   if (typeof ytPlayer.mute === "function") ytPlayer.mute();
                   ytPlayer.pauseVideo();
@@ -1021,6 +1066,11 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                 }
               },
               onStateChange: (e) => {
+                clearTimeout(scheduledCheckTimer);
+
+                // Immediately catch and skip scheduled premieres / countdown streams
+                if (checkAndSkipScheduledVideo()) return;
+
                 // State 0 is 'ENDED'
                 if (e.data === 0) {
                   console.log("[YouTube] Video finished. Resuming schedule or picking next...");
@@ -1041,14 +1091,12 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
                     acknowledgePlaylistOverride(pendingOverrideToAck);
                     pendingOverrideToAck = null;
                   }
-                  const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
-                  // isUpcoming is sometimes present in the video data for Premieres
-                  if (data && data.isUpcoming === true) {
-                    console.warn("[YouTube] Detected upcoming premiere during playback, skipping...");
-                    localStorage.removeItem("yt_last_video_id");
-                    localStorage.removeItem("yt_last_time");
-                    setTimeout(() => playYouTubeMedia(true), 500);
-                  }
+                }
+                // Watchdog: If stuck in buffering or unstarted countdown for 3s, skip it
+                else if (e.data === 3 || e.data === -1 || e.data === 5) {
+                  scheduledCheckTimer = setTimeout(() => {
+                    checkAndSkipScheduledVideo();
+                  }, 3000);
                 }
               },
               onError: (e) => { 
@@ -1146,11 +1194,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       .then((j) => {
         const items = (j && j.items || [])
           .filter((it) => {
-            // Skip upcoming premieres and live streams
-            // snippet.liveBroadcastContent is 'upcoming' for scheduled premieres
+            // Skip upcoming premieres and live streams (only allow finished normal videos 'none')
             const liveStatus = it.snippet && it.snippet.liveBroadcastContent;
-            if (liveStatus === "upcoming") {
-              console.log("[YouTube API] Skipping upcoming premiere:", it.snippet.title);
+            if (liveStatus && liveStatus !== "none") {
+              console.log("[YouTube API] Skipping upcoming/live stream:", it.snippet && it.snippet.title);
               return false;
             }
             return true;
@@ -1316,7 +1363,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   }
 
   function ensureYTPlaying() {
-    if (config.entertainmentSource === "live_channel") return Promise.resolve();
+    if (activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel") return Promise.resolve();
     return ensureYTPlayer().then(() => {
       if (!ytPlayer || typeof ytPlayer.getPlayerState !== "function") return;
       const state = ytPlayer.getPlayerState();
@@ -1339,7 +1386,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     document.body.classList.remove("sidebar-layout");
     renderBrand(null);
 
-    const isLive = config.entertainmentSource === "live_channel" || !!config.channelPlayNow;
+    const isLive = activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel" || !!config.channelPlayNow;
     if (isLive) {
       if (elements.youtubeStage) {
         elements.youtubeStage.classList.add("hidden");
@@ -1351,7 +1398,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         elements.livePlayer.classList.remove("hidden");
         elements.livePlayer.classList.remove("mini");
         elements.livePlayer.muted = masterMuted;
-        initLivePlayer(config.channelPlayNow || config.liveChannelUrl);
+        initLivePlayer(config.channelPlayNow || currentLiveUrl || config.liveChannelUrl);
         elements.livePlayer.play().catch(() => {});
       }
       if (config.channelPlayNow) {
@@ -1413,7 +1460,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     renderBrand(ad);
 
     // Entertainment mini player: live channel vs YouTube
-    const isLive = config.entertainmentSource === "live_channel";
+    const isLive = activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel";
     if (isLive) {
       if (elements.youtubeStage) {
         elements.youtubeStage.classList.add("hidden");
@@ -1521,7 +1568,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         setTimeout(startPlay, 1000);
       }
     } else {
-      if (config.entertainmentSource === "live_channel") {
+      if (activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel") {
         if (elements.livePlayer) {
           elements.livePlayer.muted = masterMuted;
           elements.livePlayer.play().catch(() => {});
