@@ -880,9 +880,14 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
               onStateChange: (e) => {
                 // State 0 is 'ENDED'
                 if (e.data === 0) {
-                  console.log("[YouTube] Video finished, picking next...");
+                  console.log("[YouTube] Video finished. Resuming schedule or picking next...");
                   localStorage.removeItem("yt_last_video_id");
                   localStorage.removeItem("yt_last_time");
+                  if (isPlayingOverride) {
+                    isPlayingOverride = false;
+                    startCycle();
+                    return;
+                  }
                   playYouTubeMedia(true);
                 }
                 // YouTube Player State 1 is 'PLAYING'
