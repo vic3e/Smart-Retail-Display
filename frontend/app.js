@@ -59,6 +59,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   let labelTimeoutId = null;
   let store = { content: null, hasZuke: false };
   let ytPlayer = null, ytReady = false, masterMuted = localStorage.getItem("masterMuted") === "true";
+  let ytInitPromise = null, cycleRunId = 0;
   const ytVideoQueues = {};
   let deviceId = null; // Only deviceId state is needed for pairing
   let isPlayingOverride = false;
@@ -633,6 +634,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     renderQr(ad.paystack_url);
     hideMedia();
 
+    // Clear any stale media error handlers from previous adverts before setting up the new one
+    elements.image.onerror = null;
+    elements.video.onerror = null;
+
     if (ad.media_type === "video") {
       // 1. Pause YouTube during video ads so Pi hardware decoder only handles one video
       if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
@@ -700,7 +705,15 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     // Preload next ad in the playlist for instant, zero-stutter transitions
     preloadNextAd(index);
 
-    const proceed = () => { index += 1; index < playlist.length ? showAd() : startEntertainment(); };
+    let advanced = false;
+    const proceed = () => {
+      if (advanced) return;
+      advanced = true;
+      elements.image.onerror = null;
+      elements.video.onerror = null;
+      index += 1;
+      index < playlist.length ? showAd() : startEntertainment();
+    };
     const target = ad.media_type === "video" ? elements.video : elements.image;
     target.onerror = () => { console.warn("Skipping broken media", ad.media_url); proceed(); };
     schedule(proceed, config.adDurationMs);
@@ -751,90 +764,125 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     return [...new Set(list.map(s => String(s || "").trim()).filter(Boolean))];
   }
 
-  // Lazily load the YouTube IFrame API and create the player.
+  // Lazily load the YouTube IFrame API and create the player (strictly single instance).
   function ensureYTPlayer() {
-    return new Promise((resolve) => {
-      if (ytReady && ytPlayer) return resolve(ytPlayer);
-      
+    if (ytReady && ytPlayer) return Promise.resolve(ytPlayer);
+    if (ytInitPromise) return ytInitPromise;
+
+    ytInitPromise = new Promise((resolve, reject) => {
+      let timeoutTimer = null;
+
+      const cleanupAndReject = (err) => {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+        ytInitPromise = null;
+        reject(err);
+      };
+
       const create = () => {
-        if (ytPlayer && typeof ytPlayer.destroy === "function") {
-          try { ytPlayer.destroy(); } catch (e) {}
-        }
-        elements.player.innerHTML = "";
-        
-        // Use the safest possible origin: prioritize window.location.origin
-        const origin = window.location.origin || (window.location.protocol + "//" + window.location.hostname + (window.location.port ? ":" + window.location.port : ""));
-        
-        ytPlayer = new window.YT.Player(elements.player, {
-          width: "100%", height: "100%",
-          playerVars: { 
-            autoplay: 1, 
-            mute: 1, 
-            playsinline: 1, 
-            rel: 0, 
-            modestbranding: 1,
-            enablejsapi: 1,
-            origin: origin
-          },
-          events: { 
-            onReady: () => { 
-              ytReady = true; 
-              resolve(ytPlayer); 
-            }, 
-            onStateChange: (e) => {
-              // State 0 is 'ENDED'
-              if (e.data === 0) {
-                console.log("[YouTube] Video finished, picking next...");
-                localStorage.removeItem("yt_last_video_id");
-                localStorage.removeItem("yt_last_time");
-                playYouTubeMedia(true);
-              }
-              // YouTube Player State 1 is 'PLAYING'
-              else if (e.data === 1) {
-                const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
-                // isUpcoming is sometimes present in the video data for Premieres
-                if (data && data.isUpcoming === true) {
-                  console.warn("[YouTube] Detected upcoming premiere during playback, skipping...");
+        try {
+          if (ytPlayer && typeof ytPlayer.destroy === "function") {
+            try { ytPlayer.destroy(); } catch (e) {}
+          }
+          elements.player.innerHTML = "";
+          
+          // Use the safest possible origin: prioritize window.location.origin
+          const origin = window.location.origin || (window.location.protocol + "//" + window.location.hostname + (window.location.port ? ":" + window.location.port : ""));
+          
+          let player = null;
+          timeoutTimer = setTimeout(() => {
+            console.warn("[YouTube] Handshake timed out after 10s; cleaning up pending player.");
+            if (player && typeof player.destroy === "function") {
+              try { player.destroy(); } catch (e) {}
+            }
+            if (ytPlayer === player) ytPlayer = null;
+            cleanupAndReject(new Error("YouTube player handshake timed out"));
+          }, 10_000);
+
+          player = new window.YT.Player(elements.player, {
+            width: "100%", height: "100%",
+            playerVars: { 
+              autoplay: 1, 
+              mute: 1, 
+              playsinline: 1, 
+              rel: 0, 
+              modestbranding: 1,
+              enablejsapi: 1,
+              origin: origin
+            },
+            events: { 
+              onReady: () => { 
+                if (timeoutTimer) clearTimeout(timeoutTimer);
+                timeoutTimer = null;
+                if (ytPlayer !== player) return;
+                ytReady = true; 
+                resolve(ytPlayer); 
+              }, 
+              onStateChange: (e) => {
+                // State 0 is 'ENDED'
+                if (e.data === 0) {
+                  console.log("[YouTube] Video finished, picking next...");
                   localStorage.removeItem("yt_last_video_id");
                   localStorage.removeItem("yt_last_time");
-                  setTimeout(() => playYouTubeMedia(true), 500);
-                }
-              }
-            },
-            onError: (e) => { 
-              const errorMap = {
-                2: "Invalid video parameter or bad ID format.",
-                5: "HTML5 player error.",
-                100: "Video not found, removed, or marked private.",
-                101: "Video owner does not allow embedded playback.",
-                150: "Video owner does not allow embedded playback."
-              };
-              const msg = errorMap[e.data] || "Unknown player error code: " + e.data;
-              console.error("[YouTube Player Error " + e.data + "]:", msg);
-              
-              // If a video fails to play (e.g. embedding restricted or deleted),
-              // we should skip to the next one to keep the entertainment loop running.
-              if ([100, 101, 150].includes(e.data)) {
-                console.log("[YouTube] Error is fatal for this video, skipping...");
-                // Clear the saved state so we don't loop on the same broken video
-                localStorage.removeItem("yt_last_video_id");
-                localStorage.removeItem("yt_last_time");
-                setTimeout(() => {
                   playYouTubeMedia(true);
-                }, 1000);
-              }
+                }
+                // YouTube Player State 1 is 'PLAYING'
+                else if (e.data === 1) {
+                  const data = ytPlayer.getVideoData ? ytPlayer.getVideoData() : null;
+                  // isUpcoming is sometimes present in the video data for Premieres
+                  if (data && data.isUpcoming === true) {
+                    console.warn("[YouTube] Detected upcoming premiere during playback, skipping...");
+                    localStorage.removeItem("yt_last_video_id");
+                    localStorage.removeItem("yt_last_time");
+                    setTimeout(() => playYouTubeMedia(true), 500);
+                  }
+                }
+              },
+              onError: (e) => { 
+                if (timeoutTimer) clearTimeout(timeoutTimer);
+                timeoutTimer = null;
+                if (ytPlayer !== player) return;
+                const errorMap = {
+                  2: "Invalid video parameter or bad ID format.",
+                  5: "HTML5 player error.",
+                  100: "Video not found, removed, or marked private.",
+                  101: "Video owner does not allow embedded playback.",
+                  150: "Video owner does not allow embedded playback."
+                };
+                const msg = errorMap[e.data] || "Unknown player error code: " + e.data;
+                console.error("[YouTube Player Error " + e.data + "]:", msg);
+                
+                // If a video fails to play (e.g. embedding restricted or deleted),
+                // we should skip to the next one to keep the entertainment loop running.
+                if ([100, 101, 150].includes(e.data)) {
+                  console.log("[YouTube] Error is fatal for this video, skipping...");
+                  // Clear the saved state so we don't loop on the same broken video
+                  localStorage.removeItem("yt_last_video_id");
+                  localStorage.removeItem("yt_last_time");
+                  setTimeout(() => {
+                    playYouTubeMedia(true);
+                  }, 1000);
+                }
 
-              ytReady = true; 
-              resolve(ytPlayer); 
-            } 
-          }
-        });
+                ytReady = true; 
+                resolve(ytPlayer); 
+              } 
+            }
+          });
+          ytPlayer = player;
+        } catch (err) {
+          cleanupAndReject(err);
+        }
       };
 
       if (window.YT && window.YT.Player) { create(); return; }
       
       // If API not loaded, set up callback and load script
+      const prevCallback = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
+        if (typeof prevCallback === "function") {
+          try { prevCallback(); } catch (e) {}
+        }
         create();
       };
       
@@ -845,6 +893,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
       }
     });
+
+    return ytInitPromise;
   }
 
   // Fetch video IDs for a playlist via the YouTube Data API.
@@ -1091,11 +1141,13 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   });
 
   async function startCycle() {
+    const runId = ++cycleRunId;
     isPlayingOverride = false;
     clearTimeout(timeoutId);
     index = 0;
     // Don't hide YouTube here, just load media and show ads
     await loadMedia();
+    if (runId !== cycleRunId) return;
     playlist = buildCyclePlaylist(rawMediaList, config, MAX_AD_CYCLE_MS);
     showAd();
   }

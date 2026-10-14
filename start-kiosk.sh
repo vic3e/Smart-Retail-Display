@@ -1,4 +1,13 @@
 #!/bin/bash
+# 0. Single-instance lock: ensure only one kiosk launcher runs per user/session.
+# Prevents duplicate autostart triggers from spawning multiple Chromium windows.
+LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/lumen-kiosk.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "[kiosk] Another kiosk launcher instance is already active; exiting to avoid duplicate windows."
+  exit 0
+fi
+
 # Wait up to 60 seconds for the backend FastAPI server to start serving port 8000.
 # This prevents the "Connection Refused" error page in Chromium on system boot!
 echo "Waiting for Lumen Digital Signage backend on http://127.0.0.1:8000..."
