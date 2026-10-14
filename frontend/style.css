@@ -526,6 +526,11 @@ body.sidebar-layout .progress {
   box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
 }
 
+/* Ensure caption bar never displays when YouTube is playing full-screen */
+body:not(.sidebar-layout) .caption-bar {
+  display: none !important;
+}
+
 /* Redefine caption positioning since it is now inside the bottom bar */
 .caption {
   position: static;

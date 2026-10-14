@@ -644,6 +644,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   function showEmpty() {
     renderBrand(null);
     elements.caption.classList.add("hidden");
+    if (elements.captionBar) elements.captionBar.classList.add("hidden");
     if (elements.priceBadge) elements.priceBadge.classList.add("hidden");
     // When empty, we show YouTube full screen as entertainment
     startEntertainment();
@@ -665,6 +666,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     elements.mediaStage.dataset.orientation = ad.orientation || "unspecified";
     elements.empty.classList.add("hidden");
     elements.caption.classList.remove("hidden");
+    if (elements.captionBar) elements.captionBar.classList.remove("hidden");
     
     // Toggle "Ask in Store" badge if the ad belongs to this paired store
     const pairedBusinessId = localStorage.getItem('smart-retail-display-businessId') || config.pairedBusinessId || '';
@@ -1173,6 +1175,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     elements.mediaStage.classList.add("hidden");
     elements.payment.classList.add("hidden");
     elements.caption.classList.add("hidden");
+    if (elements.captionBar) elements.captionBar.classList.add("hidden");
+    if (elements.priceBadge) elements.priceBadge.classList.add("hidden");
 
     // Transition YouTube to full screen
     elements.youtubeStage.classList.remove("hidden");
