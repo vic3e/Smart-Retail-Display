@@ -10,6 +10,10 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
   const DEFAULTS = {
     adDurationMs: 30_000,
     youtubeDurationMs: 10 * 60_000,
+    entertainmentSource: "youtube",
+    liveChannelUrl: "https://sabconetanw.cdn.mangomolo.com/news/smil:news.stream.smil/master.m3u8",
+    liveChannelName: "SABC News",
+    channelPlayNow: "",
     playlistId: "",
     fallbackPlaylists: [],
     shuffle: false,
@@ -1321,11 +1325,6 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         playYouTubeMedia();
       }
     }).catch(() => {});
-  }
-
-  function hideYouTube() {
-    // We don't really hide it anymore, but we can stop it if needed.
-    // However, the requirement is to "keep playing".
   }
 
   function startEntertainment(force = false) {
