@@ -468,7 +468,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       pairedBusinessId: typeof data.display_business_id === "string" ? data.display_business_id.trim() : (config.pairedBusinessId || ""),
       schedule: validateSchedule(data.schedule)
     };
-    if (data.entertainment_source) {
+    if (data.entertainment_source && !data.channel_play_now && !isPlayingOverride) {
       activeEntertainmentSource = data.entertainment_source;
       localStorage.setItem("active_entertainment_source", activeEntertainmentSource);
     }
@@ -518,17 +518,6 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     store.content = content;
     parse(content);
 
-    // If we are currently playing a YouTube override, do NOT restart the cycle.
-    // This prevents the next poll (which carries the cleared override) from interrupting playback.
-    if (isPlayingOverride) {
-      if (config.youtubePlayNowId) {
-        // There is a NEW override, let's play it!
-        clearTimeout(timeoutId);
-        startEntertainment(true);
-      }
-      return;
-    }
-
     // Urgent YouTube override: interrupt immediately
     if (config.youtubePlayNowId) {
       activeEntertainmentSource = "youtube";
@@ -546,6 +535,12 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       isPlayingOverride = true;
       clearTimeout(timeoutId);
       startEntertainment(true);
+      return;
+    }
+
+    // If an override is currently playing, do NOT restart the cycle on background polls.
+    // This prevents subsequent polls (which carry the cleared override) from interrupting playback.
+    if (isPlayingOverride) {
       return;
     }
 
@@ -1618,7 +1613,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     const base = DASHBOARD_API_BASE_URL || 'https://app.zuke.co.za';
     return queryParams.get("zuke") || window.ZUKE_EXPORT_URL || `${base}/api/display-ads/export${dParam}`;
   };
-  const POLL_INTERVAL_MS = 30_000;
+  const POLL_INTERVAL_MS = 10_000;
   const adapter = window.createSubscriptionAdapter({ url: getExportUrl, intervalMs: POLL_INTERVAL_MS });
   adapter.subscribe(onZukeContent);
 
