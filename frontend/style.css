@@ -121,6 +121,19 @@ body { margin: 0; min-width: 320px; overflow: hidden; font-family: 'Hanken Grote
 }
 
 /* ── Sidebar Layout (YouTube Default View-style) ────────────────────────── */
+body.sidebar-layout::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 32vw;
+  height: 100vh;
+  background-color: #060a16;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  z-index: 5;
+  pointer-events: none;
+}
+
 body.sidebar-layout #media-stage {
   width: 68vw;
   right: auto; /* Cancel default inset: 0 */
@@ -128,30 +141,31 @@ body.sidebar-layout #media-stage {
 }
 
 body.sidebar-layout #youtube-stage.mini {
+  position: absolute;
   width: 32vw;
-  height: 100vh;
+  height: 18vw;
+  aspect-ratio: 16 / 9;
   left: auto;
   right: 0;
-  top: 0;
+  top: 2vh;
   transform: none;
-  border-radius: 0;
+  border-radius: 8px;
   border: none;
-  border-left: 2px solid rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-  background-color: #060a16;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 4vh;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  background-color: #000;
+  display: block;
+  padding: 0;
   z-index: 10;
+  overflow: hidden;
 }
 
-body.sidebar-layout #youtube-stage.mini #youtube-player {
-  width: 100%;
-  height: auto;
+body.sidebar-layout #youtube-stage.mini #youtube-player,
+body.sidebar-layout #youtube-stage.mini iframe {
+  width: 100% !important;
+  height: 100% !important;
   aspect-ratio: 16 / 9;
-  flex-shrink: 0;
+  display: block;
+  border: 0;
 }
 
 /* ── Live Stream Player (HLS) ───────────────────────────────────────────── */
@@ -168,20 +182,22 @@ body.sidebar-layout #youtube-stage.mini #youtube-player {
 }
 
 body.sidebar-layout #live-player.mini {
+  position: absolute;
   width: 32vw;
-  height: 100vh;
+  height: 18vw;
+  aspect-ratio: 16 / 9;
   left: auto;
   right: 0;
-  top: 0;
+  top: 2vh;
   transform: none;
-  border-radius: 0;
+  border-radius: 8px;
   border: none;
-  border-left: 2px solid rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-  background-color: #060a16;
-  object-fit: contain;
-  padding-top: 4vh;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  background-color: #000;
+  object-fit: cover;
+  padding: 0;
   z-index: 10;
+  overflow: hidden;
 }
 
 body.sidebar-layout .payment-overlay {

@@ -706,8 +706,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       if (elements.livePlayer) {
         elements.livePlayer.classList.remove("hidden");
         elements.livePlayer.classList.add("mini");
-        elements.livePlayer.muted = true;
-        initLivePlayer(config.liveChannelUrl);
+        elements.livePlayer.muted = (ad.media_type === "video") ? true : masterMuted;
+        initLivePlayer(currentLiveUrl || config.liveChannelUrl);
+        elements.livePlayer.play().catch(() => {});
       }
     } else {
       if (elements.livePlayer) {
@@ -1383,6 +1384,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
 
     const isLive = activeEntertainmentSource === "live_channel" || config.entertainmentSource === "live_channel" || !!config.channelPlayNow;
     if (isLive) {
+      activeEntertainmentSource = "live_channel";
+      localStorage.setItem("active_entertainment_source", "live_channel");
       if (elements.youtubeStage) {
         elements.youtubeStage.classList.add("hidden");
         if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
@@ -1401,6 +1404,8 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
         config.channelPlayNow = "";
       }
     } else {
+      activeEntertainmentSource = "youtube";
+      localStorage.setItem("active_entertainment_source", "youtube");
       if (elements.livePlayer) {
         elements.livePlayer.classList.add("hidden");
         elements.livePlayer.pause();
@@ -1466,8 +1471,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
       if (elements.livePlayer) {
         elements.livePlayer.classList.remove("hidden");
         elements.livePlayer.classList.add("mini");
-        elements.livePlayer.muted = true;
-        initLivePlayer(config.liveChannelUrl);
+        elements.livePlayer.muted = (ad.media_type === "video") ? true : masterMuted;
+        initLivePlayer(currentLiveUrl || config.liveChannelUrl);
+        elements.livePlayer.play().catch(() => {});
       }
     } else {
       if (elements.livePlayer) {
