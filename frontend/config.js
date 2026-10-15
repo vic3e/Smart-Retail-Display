@@ -11,3 +11,5 @@ export const PAIRING_API_BASE_URL = DASHBOARD_API_BASE_URL;
 
 // Base URL for the Smart-Retail-Display Python backend (running on http://127.0.0.1:8000 on the Pi)
 export const MEDIA_API_BASE_URL = query?.get('media_api') || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+
+export const DEFAULT_YOUTUBE_PLAYLIST_ID = query?.get('default_playlist') || 'PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI';

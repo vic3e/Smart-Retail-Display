@@ -1,4 +1,4 @@
-import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from './config.js';
+import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAULT_YOUTUBE_PLAYLIST_ID } from './config.js';
 
 "use strict";
   const MAX_AD_CYCLE_MS = 5 * 60_000;
@@ -14,7 +14,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     liveChannelUrl: "https://sabconetanw.cdn.mangomolo.com/news/smil:news.stream.smil/master.m3u8",
     liveChannelName: "SABC News",
     channelPlayNow: "",
-    playlistId: "",
+    playlistId: DEFAULT_YOUTUBE_PLAYLIST_ID || "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
     fallbackPlaylists: [],
     shuffle: false,
     youtubeMode: "both",
@@ -451,7 +451,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     config = {
       adDurationMs: positive(data.ad_duration_seconds, 30, 300) * 1000,
       youtubeDurationMs: positive(data.youtube_duration_minutes, 10, 120) * 60_000,
-      playlistId: typeof data.youtube_playlist_id === "string" ? data.youtube_playlist_id.trim() : (config.playlistId || ""),
+      playlistId: typeof data.youtube_playlist_id === "string" && data.youtube_playlist_id.trim() ? data.youtube_playlist_id.trim() : (config.playlistId || DEFAULT_YOUTUBE_PLAYLIST_ID || "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"),
       fallbackPlaylists: Array.isArray(data.youtube_fallback_playlist_ids) ? data.youtube_fallback_playlist_ids.filter(Boolean) : (config.fallbackPlaylists || []),
       shuffle: !!data.youtube_shuffle,
       youtubeMode: resolvedMode,
@@ -882,6 +882,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
     }
 
     // Ensure uniqueness and clean strings
+    if (!list.length) { list.push(DEFAULT_YOUTUBE_PLAYLIST_ID || "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"); }
     return [...new Set(list.map(s => String(s || "").trim()).filter(Boolean))];
   }
 
@@ -970,7 +971,13 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL } from
               hlsInstance.recoverMediaError();
               break;
             default:
-              console.error("[HLS] Unrecoverable stream error; falling back to YouTube...");
+              console.error("[HLS] Unrecoverable stream error; falling back...");
+              const defaultLive = "https://sabconetanw.cdn.mangomolo.com/news/smil:news.stream.smil/master.m3u8";
+              if (url !== defaultLive && elements.livePlayer) {
+                console.log("[HLS] Recovering with verified SABC News channel...");
+                initLivePlayer(defaultLive);
+                return;
+              }
               try { hlsInstance.destroy(); } catch (e) {}
               hlsInstance = null;
               currentLiveUrl = "";

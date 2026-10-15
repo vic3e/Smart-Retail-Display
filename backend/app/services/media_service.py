@@ -14,7 +14,7 @@ DEFAULT_SCHEDULE = {
 }
 
 DEFAULT_CONFIG = {
-    "youtube_playlist_id": "",
+    "youtube_playlist_id": os.getenv("DEFAULT_YOUTUBE_PLAYLIST_ID", "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"),
     "ad_duration_seconds": 30,
     "youtube_duration_minutes": 10,
     "youtube_mode": "both",
