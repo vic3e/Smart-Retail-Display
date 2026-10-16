@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-REQUIRED_FIELDS = {"id", "business_id", "business_name", "type", "name", "media_type", "media_url", "paystack_url", "payment_status", "play_count", "status"}
+REQUIRED_FIELDS = {"id", "business_id", "business_name", "type", "name", "media_type", "media_url", "payment_status", "play_count", "status"}
 SUPPORTED_TYPES = {"image", "video"}
 ALLOWED_ORIENTATIONS = {"landscape", "portrait", "square"}
 ALLOWED_YOUTUBE_MODES = {"api", "normal", "both"}
@@ -72,7 +72,7 @@ def is_valid_media(item: object) -> bool:
     return (
         item["status"] == "active" and item["payment_status"] == "paid" and item["media_type"] in SUPPORTED_TYPES
         and all(isinstance(item[key], str) and item[key].strip() for key in ("id", "business_id", "business_name", "type", "name"))
-        and is_http_url(item["media_url"]) and is_http_url(item["paystack_url"])
+        and is_http_url(item["media_url"]) and (not item.get("paystack_url") or is_http_url(item["paystack_url"]))
         and isinstance(item["play_count"], int) and not isinstance(item["play_count"], bool) and item["play_count"] > 0
     )
 
