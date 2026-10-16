@@ -45,6 +45,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAU
     progress: document.querySelector("#progress-bar"),
     brandBar: document.querySelector("#brandBar"),
     masterMute: document.querySelector("#master-mute"),
+    unpairButton: document.querySelector("#unpair-screen-btn"),
     muteIconOn: document.querySelector("#mute-icon-on"),
     muteIconOff: document.querySelector("#mute-icon-off"),
     splash: document.querySelector("#splash-screen"),
@@ -1644,6 +1645,29 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAU
     }
 
     if (elements.splashBar) elements.splashBar.style.width = "100%";
+
+    function unpairKiosk() {
+      if (confirm('Disconnect this TV display from the current store? It will show the pairing code to connect with a new store.')) {
+        localStorage.removeItem('smart-retail-display-deviceId');
+        localStorage.removeItem('smart-retail-display-businessId');
+        window.location.reload();
+      }
+    }
+
+    if (elements.unpairButton) {
+      elements.unpairButton.addEventListener('click', unpairKiosk);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'u' || e.key === 'U') {
+        unpairKiosk();
+      }
+    });
+
+    if (queryParams.get('unpair') === 'true') {
+      localStorage.removeItem('smart-retail-display-deviceId');
+      localStorage.removeItem('smart-retail-display-businessId');
+    }
 
     const storedDeviceId = localStorage.getItem('smart-retail-display-deviceId');
     if (elements.pairButton) {
