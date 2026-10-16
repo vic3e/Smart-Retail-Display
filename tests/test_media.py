@@ -18,6 +18,7 @@ def test_media_endpoint_returns_only_active_paid_valid_adverts(tmp_path, monkeyp
     media_file = tmp_path / "media.json"
     media_file.write_text(json.dumps({"media": [ad(), ad(id="inactive", status="inactive"), ad(id="unpaid", payment_status="pending"), ad(id="broken", business_name="")], "youtube_playlist_id": "playlist", "ad_duration_seconds": 25, "youtube_duration_minutes": 10}), encoding="utf-8")
     monkeypatch.setattr(media_route, "MEDIA_FILE", media_file)
+    monkeypatch.setattr(media_route, "YOUTUBE_API_KEY", "")
     response = TestClient(create_app(MockGPIOController(sleep_fn=lambda _: None))).get("/api/media")
     assert response.status_code == 200
     assert response.json() == {
@@ -39,7 +40,7 @@ def test_invalid_json_and_playback_config_fall_back_safely(tmp_path):
     media_file.write_text("invalid", encoding="utf-8")
     assert load_media_configuration(media_file) == {
         "media": [],
-        "youtube_playlist_id": "",
+        "youtube_playlist_id": "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
         "ad_duration_seconds": 30,
         "youtube_duration_minutes": 10,
         "youtube_mode": "both",
