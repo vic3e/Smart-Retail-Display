@@ -84,6 +84,33 @@ dpms = false
 chromium = ~/Smart-Retail-Display/start-kiosk.sh
 ```
 
+
+#### 3. HDMI Audio Configuration & Volume Controls
+Raspberry Pi OS Bookworm utilizes PipeWire/WirePlumber:
+```bash
+# Set HDMI sound card as default output
+wpctl set-default alsa_output.platform-fef00700.hdmi.hdmi-stereo
+
+# Adjust volume
+wpctl set-volume @DEFAULT_AUDIO_SINK@ 1.0     # 100% full volume
+wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.50    # 50% volume
+wpctl set-volume @DEFAULT_AUDIO_SINK@ 20%+    # Increase by 20%
+wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle    # Toggle mute
+```
+
+#### 4. Screen Unpairing & Store Re-Linking
+To unpair the physical screen and pair it with a different merchant:
+* **On-Screen**: Click the disconnect icon in the top-right toolbar.
+* **Keyboard**: Press the **`U`** key on an attached keyboard.
+* **URL**: Load `http://127.0.0.1:8000/?unpair=true` to wipe local credentials.
+* **Remote Terminal (SSH)**:
+  ```bash
+  killall -9 chromium 2>/dev/null
+  rm -rf ~/.config/chromium/Default/Local\ Storage/leveldb/*
+  ~/Smart-Retail-Display/start-kiosk.sh &
+  ```
+* **Dashboard Remote Disconnect**: Under **Marketplace > Smart Retail Display > Manage Your Screens**, click **"Disconnect Screen"**.
+
 ---
 
 ### B. Windows Mini-PC or Managed Laptop

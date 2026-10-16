@@ -227,3 +227,78 @@ sudo systemctl restart lumen-backend.service
 ```bash
 sudo systemctl stop lumen-backend.service
 ```
+
+---
+
+## 🔊 Audio Configuration (HDMI Audio to TV Speakers)
+
+Modern Raspberry Pi OS uses **PipeWire** and **WirePlumber** to manage audio. By default, the Pi may route audio to the 3.5mm analog headphone jack instead of your TV's HDMI port.
+
+### 1. Set HDMI as the Default Sound Card
+Inspect your available audio sinks:
+```bash
+wpctl status
+```
+Find the node number for `Built-in Audio Digital Stereo (HDMI)` (commonly `67` or by node name `alsa_output.platform-fef00700.hdmi.hdmi-stereo`), then set it as the default output:
+```bash
+wpctl set-default @DEFAULT_AUDIO_SINK@
+# Or specify by node name:
+wpctl set-default alsa_output.platform-fef00700.hdmi.hdmi-stereo
+```
+
+### 2. Adjust or Check Volume
+* **Set to full volume (100%)**:
+  ```bash
+  wpctl set-volume @DEFAULT_AUDIO_SINK@ 1.0
+  ```
+* **Set to 50% volume**:
+  ```bash
+  wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.50
+  ```
+* **Increase volume by 20%**:
+  ```bash
+  wpctl set-volume @DEFAULT_AUDIO_SINK@ 20%+
+  ```
+* **Check current volume**:
+  ```bash
+  wpctl get-volume @DEFAULT_AUDIO_SINK@
+  ```
+* **Mute / Unmute toggle**:
+  ```bash
+  wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+  ```
+
+---
+
+## 🔗 Screen Pairing & Store Management
+
+Each display kiosk generates a unique `deviceId` on first launch and pairs to a specific merchant store, enforcing strict per-business content isolation.
+
+### 1. Pairing a Fresh Screen
+1. When unlinked, the TV screen will display the **"Connect to Your Account" / "Scan to Connect"** screen with a QR code and a 6-digit pairing code input box.
+2. In your Zuke Dashboard, switch to the desired business (e.g. *Viciel Beauty*).
+3. Navigate to **Marketplace > Smart Retail Display > Manage Your Screens** (`/pages/smart-retail-display/manage-screens.html`).
+4. Click **"Connect New Screen"** to generate a secure 6-digit code.
+5. Enter the code on the TV screen (or scan the on-screen QR code).
+6. The TV will instantly link to that business, hide the pairing view, and begin cycling that store's ads and live entertainment.
+
+### 2. How to Unpair the TV Screen
+To unlink the screen from a business and connect it to another store, use any of these methods:
+* **On-Screen Control**: Click the disconnect icon in the top-right corner of the TV screen (next to the mute button) and confirm.
+* **Keyboard Shortcut**: Press **`U`** on any keyboard plugged into the Pi to prompt and unpair.
+* **URL Parameter**: Open Chromium to `http://127.0.0.1:8000/?unpair=true` to clear the stored device credentials and reload into pairing mode.
+* **Remote Terminal (SSH)**: Run:
+  ```bash
+  killall -9 chromium 2>/dev/null
+  rm -rf ~/.config/chromium/Default/Local\ Storage/leveldb/*
+  ~/Smart-Retail-Display/start-kiosk.sh &
+  ```
+* **Dashboard Remote Disconnect**: In **Manage Your Screens**, click **"Disconnect Screen"** under the active screen card.
+
+---
+
+## 🖼️ Ad Framing & Content Display
+
+* **Aspect Ratio Preservation**: During ad cycles, the screen shifts to a sidebar layout (`68vw` ad frame + `32vw` mini-player/QR sidebar). The display engine applies `object-fit: contain` so that 16:9 banners, portrait graphics, and square ads fit the frame without having their edges, prices, or copy cropped.
+* **Optional QR Destination**: If an ad does not have a Paystack payment link, the system automatically checks for a store WhatsApp number to create a direct click-to-chat QR link, or renders the **"Ask in Store"** badge if no link is configured.
+
