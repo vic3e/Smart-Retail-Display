@@ -789,19 +789,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAU
       elements.image.classList.remove("hidden");
       elements.image.classList.add("image-zoom");
       elements.image.style.animationDuration = config.adDurationMs + "ms";
-      if (ad.orientation === "portrait" || ad.orientation === "square") {
-        elements.image.classList.add("contain");
-        elements.image.onload = null;
-      } else if (ad.orientation === "landscape") {
-        elements.image.classList.remove("contain");
-        elements.image.onload = null;
-      } else {
-        elements.image.onload = function onImgLoad() {
-          const ratio = (elements.image.naturalWidth && elements.image.naturalHeight) ? elements.image.naturalWidth / elements.image.naturalHeight : 1;
-          elements.image.classList.toggle("contain", ratio < 1.6);
-          elements.image.onload = null;
-        };
-      }
+      // Ensure image fits inside the ad frame (avoids cropping 16:9 ads when sidebar is active)
+      elements.image.classList.add("contain");
+      elements.image.onload = null;
       elements.image.src = ad.media_url;
 
       // Resume entertainment in mini mode during image ads
@@ -1537,19 +1527,9 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAU
       elements.image.classList.remove("hidden");
       elements.image.classList.add("image-zoom");
       elements.image.style.animationDuration = config.adDurationMs + "ms";
-      if (ad.orientation === "portrait" || ad.orientation === "square") {
-        elements.image.classList.add("contain");
-        elements.image.onload = null;
-      } else if (ad.orientation === "landscape") {
-        elements.image.classList.remove("contain");
-        elements.image.onload = null;
-      } else {
-        elements.image.onload = function onImgLoad() {
-          const ratio = (elements.image.naturalWidth && elements.image.naturalHeight) ? elements.image.naturalWidth / elements.image.naturalHeight : 1;
-          elements.image.classList.toggle("contain", ratio < 1.6);
-          elements.image.onload = null;
-        };
-      }
+      // Ensure image fits inside the ad frame (avoids cropping 16:9 ads when sidebar is active)
+      elements.image.classList.add("contain");
+      elements.image.onload = null;
       elements.image.src = ad.media_url;
     }
 
