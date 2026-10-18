@@ -895,7 +895,7 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAU
     } catch (e) {}
   }
 
-  // Guard to detect and skip upcoming premieres, countdowns, and scheduled live streams
+  // Guard to detect and skip upcoming premieres and unstarted countdown streams (active live broadcasts are allowed)
   function checkAndSkipScheduledVideo() {
     if (!ytPlayer) return false;
     try {
@@ -903,14 +903,14 @@ import { DASHBOARD_API_BASE_URL, MEDIA_API_BASE_URL, PAIRING_API_BASE_URL, DEFAU
       const title = (data && data.title) ? data.title.toLowerCase() : "";
       const dur = typeof ytPlayer.getDuration === "function" ? ytPlayer.getDuration() : 1;
       
-      const isScheduled = (data && (data.isUpcoming === true || data.isLive === true)) ||
+      const isScheduled = (data && data.isUpcoming === true) ||
                           title.includes("premiere in") ||
                           title.includes("live in ") ||
                           title.includes("scheduled for") ||
                           title.includes("waiting for");
 
-      if (isScheduled || (dur === 0 && data && data.isPlayable === false)) {
-        console.warn("[YouTube Guard] Detected scheduled premiere/stream ('" + (data?.title || "") + "'). Skipping immediately...");
+      if (isScheduled || (dur === 0 && data && data.isPlayable === false && !data.isLive)) {
+        console.warn("[YouTube Guard] Detected unstarted premiere/countdown ('" + (data?.title || "") + "'). Skipping immediately...");
         localStorage.removeItem("yt_last_video_id");
         localStorage.removeItem("yt_last_time");
         if (typeof ytPlayer.nextVideo === "function") {
